@@ -15,6 +15,9 @@ type Config struct {
     WorkerName  string
     WorkerVersion string
     AdminToken  string
+    AdminUser   string
+    AdminPass   string
+    PublicURL   string
 }
 
 func getenv(key, def string) string {
@@ -50,5 +53,8 @@ func Parse() (*Config, error) {
         WorkerName:  getenv("WORKER_NAME", "worker-1"),
         WorkerVersion: getenv("WORKER_VERSION", "v0.1.0"),
         AdminToken:  getenv("ADMIN_TOKEN", ""),
+        AdminUser:   getenv("ADMIN_USER", ""),
+        AdminPass:   getenv("ADMIN_PASS", ""),
+        PublicURL:   getenv("PUBLIC_URL", ""),
     }, nil
 }

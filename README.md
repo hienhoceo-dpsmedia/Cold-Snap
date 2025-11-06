@@ -181,13 +181,22 @@ Configure a webhook trigger at `/webhook/test` - Cold Snap will protect it with 
    - Fork this repo, copy `stack.env.example` to `stack.env`, edit values (at least `ADMIN_TOKEN`), commit, then point Portainer to your fork.
    - Example `stack.env`:
      ```env
+     PUBLIC_URL=https://coldsnap.yourdomain.com
      ADMIN_TOKEN=change_me_to_a_strong_random
+     # Optional basic auth for /console and Admin REST
+     ADMIN_USER=admin
+     ADMIN_PASS=supersecret
      API_PORT=8080
      RETENTION_DAYS=7
      DATABASE_URL=postgres://hook:hook@postgres:5432/hook?sslmode=disable
      REDIS_URL=redis://redis:6379/0
      ```
 6. **Deploy** 🚀 (services: api on 8080, worker, postgres, redis)
+
+> Build trouble? If your Portainer host cannot reach the Go module proxy, you can set a different proxy via build args (Repository → Advanced → Build-time variables):
+> - `GOPROXY=https://goproxy.io,direct`
+> - `GOSUMDB=sum.golang.org`
+> Or build the image locally and push to your registry, then replace the `build:` section with `image: <your-registry>/cold-snap:latest`.
 
 **Step 2: Configure Nginx Proxy Manager**
 

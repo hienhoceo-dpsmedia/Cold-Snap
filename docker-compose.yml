@@ -27,6 +27,9 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://hook:hook@postgres:5432/hook?sslmode=disable}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       ADMIN_TOKEN: "${ADMIN_TOKEN:-changeme}"
+      ADMIN_USER: "${ADMIN_USER:-}"
+      ADMIN_PASS: "${ADMIN_PASS:-}"
+      PUBLIC_URL: "${PUBLIC_URL:-}"
     depends_on:
       - postgres
       - redis

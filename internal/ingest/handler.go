@@ -24,6 +24,8 @@ type Server struct {
     DB         *pgxpool.Pool
     Logger     func(msg string, kv ...any)
     AdminToken string
+    AdminUser  string
+    AdminPass  string
 }
 
 func NewServer(db *pgxpool.Pool, logger func(string, ...any), adminToken string) *Server {
@@ -42,8 +44,12 @@ func (s *Server) Routes(mux *http.ServeMux) {
         mux.HandleFunc("/admin/routes/", s.adminRoutesSub)
         mux.HandleFunc("/admin/events", s.adminEvents)
         mux.HandleFunc("/admin/attempts", s.adminAttempts)
-        // Static admin console (no token required to load; API is protected)
-        mux.Handle("/console/", http.StripPrefix("/console/", adminHandler()))
+        // Static admin console; require Basic auth if ADMIN_USER/ADMIN_PASS are set
+        h := http.StripPrefix("/console/", adminHandler())
+        if s.AdminUser != "" {
+            h = basicAuth(h, s.AdminUser, s.AdminPass)
+        }
+        mux.Handle("/console/", h)
     }
     mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200); _, _ = w.Write([]byte("ok")) })
 }
@@ -118,15 +124,37 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 
 // --- Admin REST (bearer-protected) ---
 func (s *Server) checkAdmin(w http.ResponseWriter, r *http.Request) bool {
-    if s.AdminToken == "" { return false }
+    if s.AdminToken == "" && s.AdminUser == "" { return false }
     auth := r.Header.Get("Authorization")
-    if strings.HasPrefix(strings.ToLower(auth), "bearer ") {
+    low := strings.ToLower(auth)
+    if strings.HasPrefix(low, "bearer ") && s.AdminToken != "" {
         tok := strings.TrimSpace(auth[7:])
         if tok == s.AdminToken { return true }
     }
-    w.Header().Set("WWW-Authenticate", "Bearer")
+    if strings.HasPrefix(low, "basic ") && s.AdminUser != "" {
+        user, pass, ok := r.BasicAuth()
+        if ok && user == s.AdminUser && pass == s.AdminPass { return true }
+        w.Header().Set("WWW-Authenticate", "Basic realm=\"ColdSnap Admin\"")
+        http.Error(w, "unauthorized", http.StatusUnauthorized)
+        return false
+    }
+    if s.AdminToken != "" {
+        w.Header().Set("WWW-Authenticate", "Bearer")
+    }
     http.Error(w, "unauthorized", http.StatusUnauthorized)
     return false
+}
+
+func basicAuth(next http.Handler, user, pass string) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        u, p, ok := r.BasicAuth()
+        if !ok || u != user || p != pass {
+            w.Header().Set("WWW-Authenticate", "Basic realm=\"ColdSnap Admin\"")
+            http.Error(w, "unauthorized", http.StatusUnauthorized)
+            return
+        }
+        next.ServeHTTP(w, r)
+    })
 }
 
 // POST/GET /admin/sources
