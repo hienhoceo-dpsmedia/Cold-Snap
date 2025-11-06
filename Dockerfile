@@ -6,18 +6,15 @@ ARG GOSUMDB=sum.golang.org
 ENV GOPROXY=${GOPROXY} \
     GOSUMDB=${GOSUMDB}
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY go.mod go.sum ./
+RUN go mod download && go mod verify
+
 COPY . .
 # Create output directory
 RUN mkdir -p /out
-# If vendor/ exists, build offline using vendored modules; otherwise download modules.
-RUN if [ -d vendor ]; then \
-      echo "Using vendored modules"; \
-      CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=vendor -o /out/cold-snap ./cmd/runner; \
-    else \
-      echo "Downloading modules via ${GOPROXY}"; \
-      go mod download; \
-      CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/cold-snap ./cmd/runner; \
-    fi
+
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /out/cold-snap ./cmd/runner
 
 FROM gcr.io/distroless/base-debian12
 WORKDIR /app
