@@ -29,8 +29,11 @@ yarn.lock
 
 # Config files with secrets
 config/
-*.env
+.env
 .env.*
+
+# But allow stack.env for Portainer Repository deployment
+!stack.env
 
 # But allow Go config files in internal/
 !internal/config/config.go
