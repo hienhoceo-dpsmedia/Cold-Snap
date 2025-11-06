@@ -32,6 +32,9 @@ config/
 *.env
 .env.*
 
+# But allow Go config files in internal/
+!internal/config/config.go
+
 # IDE files (keep in local)
 *.code-workspace
 

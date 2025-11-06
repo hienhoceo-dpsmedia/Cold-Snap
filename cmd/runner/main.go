@@ -51,7 +51,7 @@ func main() {
     switch cfg.Role {
     case "api":
         mux := http.NewServeMux()
-        ingest.NewServer(database.Pool, logger).Routes(mux)
+        ingest.NewServer(database.Pool, logger, cfg.AdminToken).Routes(mux)
         addr := fmt.Sprintf(":%d", cfg.APIPort)
         logger("api_listen", "addr", addr)
         srv := &http.Server{Addr: addr, Handler: mux}

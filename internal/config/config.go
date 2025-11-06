@@ -14,6 +14,7 @@ type Config struct {
     RedisURL    string
     WorkerName  string
     WorkerVersion string
+    AdminToken  string
 }
 
 func getenv(key, def string) string {
@@ -48,6 +49,6 @@ func Parse() (*Config, error) {
         RedisURL:    redisURL,
         WorkerName:  getenv("WORKER_NAME", "worker-1"),
         WorkerVersion: getenv("WORKER_VERSION", "v0.1.0"),
+        AdminToken:  getenv("ADMIN_TOKEN", ""),
     }, nil
 }
-
