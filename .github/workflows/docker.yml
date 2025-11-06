@@ -29,15 +29,23 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Verify Dockerfile
+        run: |
+          echo "=== Dockerfile content ==="
+          cat Dockerfile
+          echo "=== End Dockerfile ==="
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           platforms: linux/amd64
+          no-cache: true
           build-args: |
             GOPROXY=https://goproxy.io,direct
             GOSUMDB=sum.golang.org
+            BUILD_DATE=${{ github.sha }}
           tags: |
             ghcr.io/${{ github.repository_owner }}/cold-snap:latest
 
