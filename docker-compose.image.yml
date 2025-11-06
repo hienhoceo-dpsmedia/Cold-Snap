@@ -10,7 +10,7 @@ services:
     ports:
       - "${PG_PORT:-15432}:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata2:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hook} -d ${POSTGRES_DB:-hook}"]
       interval: 5s
@@ -62,5 +62,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  pgdata:
+  pgdata2:
 
