@@ -1,4 +1,5 @@
 module cold-snap
+module cold-snap
 
 go 1.22.3
 
