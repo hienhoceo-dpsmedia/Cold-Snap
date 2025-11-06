@@ -16,6 +16,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+
+      - name: Prepare modules (generate go.sum and vendor)
+        run: |
+          go env -w GOPROXY=https://goproxy.io,direct
+          go mod tidy
+          go mod vendor
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -48,4 +59,3 @@ jobs:
             BUILD_DATE=${{ github.sha }}
           tags: |
             ghcr.io/${{ github.repository_owner }}/cold-snap:latest
-
