@@ -1,0 +1,19 @@
+version: "3.9"
+
+services:
+  n8n:
+    image: n8nio/n8n:1.71.3
+    environment:
+      N8N_HOST: n8n.local
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_TUNNEL_URL: http://localhost:5678/
+    ports:
+      - "5678:5678"
+    restart: unless-stopped
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  n8n_data:
+

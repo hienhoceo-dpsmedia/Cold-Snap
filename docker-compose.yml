@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: hook
+      POSTGRES_PASSWORD: hook
+      POSTGRES_DB: hook
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      ROLE: api
+      API_PORT: "8080"
+      DATABASE_URL: postgres://hook:hook@postgres:5432/hook?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "8080:8080"
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      ROLE: worker
+      DATABASE_URL: postgres://hook:hook@postgres:5432/hook?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      RETENTION_DAYS: "7"
+    depends_on:
+      - postgres
+      - redis
+
+volumes:
+  pgdata:

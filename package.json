@@ -1,0 +1,15 @@
+{
+  "name": "cold-snap",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cold Snap — Smart webhook throttling that keeps your n8n cool under pressure.",
+  "scripts": {
+    "up": "docker compose up --build",
+    "up:n8n": "docker compose -f docker-compose.yml -f docker-compose.n8n.yml up --build",
+    "down": "docker compose down -v",
+    "logs": "docker compose logs -f --tail=100",
+    "ps": "docker compose ps",
+    "seed": "docker compose exec -T postgres psql -U hook -d hook < seeds/demo.sql",
+    "seed:n8n": "docker compose exec -T postgres psql -U hook -d hook < seeds/n8n-demo.sql"
+  }
+}

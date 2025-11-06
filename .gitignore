@@ -1,0 +1,25 @@
+# Binaries
+simple-hook
+bin/
+dist/
+
+# Go build cache
+*.test
+*.out
+
+# Editor/OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Env
+.env
+
+# Node
+node_modules/
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+

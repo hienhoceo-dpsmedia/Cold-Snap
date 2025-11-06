@@ -1,0 +1,5 @@
+ALTER TABLE event
+  ADD COLUMN IF NOT EXISTS method text,
+  ADD COLUMN IF NOT EXISTS path text,
+  ADD COLUMN IF NOT EXISTS query text;
+
