@@ -213,6 +213,27 @@ Configure a webhook trigger at `/webhook/test` - Cold Snap will protect it with 
 
 > **✅ Ready to Deploy**: The prebuilt image is verified and working. Just edit `ADMIN_TOKEN`, `ADMIN_USER`, `ADMIN_PASS`, and `PUBLIC_URL` before deploying!
 
+#### 🛠️ Troubleshooting Port Conflicts
+
+If you get "port is already allocated" errors during deployment:
+
+**Issue**: Port 5432 or 6379 already in use on your server.
+
+**Solution**: The `stack.env` already uses alternative ports:
+- **PostgreSQL**: `15432` (instead of default `5432`)
+- **Redis**: `16379` (instead of default `6379`)
+
+**Accessing Database Directly**:
+```bash
+# Connect to PostgreSQL on alternative port
+psql postgres://hook:hook@localhost:15432/hook
+
+# Connect to Redis on alternative port
+redis-cli -p 16379
+```
+
+If you need different ports, just update `PG_PORT` and `REDIS_PORT` in `stack.env`.
+
 #### Alternative: Build From Repository (only if you want to build in Portainer)
 
 If you must build in Portainer, switch the compose path to `docker-compose.yml`. In restricted networks add to `stack.env` (or Portainer build args):
