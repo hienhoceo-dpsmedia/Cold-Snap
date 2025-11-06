@@ -4,13 +4,14 @@ services:
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-hook}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hook}
-      POSTGRES_DB: ${POSTGRES_DB:-hook}
+      # Explicitly set credentials (Portainer env vars can override these)
+      POSTGRES_USER: hook
+      POSTGRES_PASSWORD: hook
+      POSTGRES_DB: hook
     ports:
       - "${PG_PORT:-15432}:5432"
     volumes:
-      - pgdata2:/var/lib/postgresql/data
+      - pgdata3:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hook} -d ${POSTGRES_DB:-hook}"]
       interval: 5s
@@ -31,13 +32,13 @@ services:
     image: ${IMAGE:-ghcr.io/OWNER/cold-snap:latest}
     environment:
       ROLE: api
-      API_PORT: "${API_PORT:-8080}"
-      DATABASE_URL: ${DATABASE_URL:-postgres://hook:hook@postgres:5432/hook?sslmode=disable}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      ADMIN_TOKEN: "${ADMIN_TOKEN:-changeme}"
-      ADMIN_USER: "${ADMIN_USER:-}"
-      ADMIN_PASS: "${ADMIN_PASS:-}"
-      PUBLIC_URL: "${PUBLIC_URL:-}"
+      API_PORT: "8080"
+      DATABASE_URL: postgres://hook:hook@postgres:5432/hook?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      ADMIN_TOKEN: "change_me_to_a_strong_random"
+      ADMIN_USER: "admin"
+      ADMIN_PASS: "supersecret"
+      PUBLIC_URL: "http://localhost:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -51,9 +52,9 @@ services:
     image: ${IMAGE:-ghcr.io/OWNER/cold-snap:latest}
     environment:
       ROLE: worker
-      DATABASE_URL: ${DATABASE_URL:-postgres://hook:hook@postgres:5432/hook?sslmode=disable}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      RETENTION_DAYS: "${RETENTION_DAYS:-7}"
+      DATABASE_URL: postgres://hook:hook@postgres:5432/hook?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      RETENTION_DAYS: "7"
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,5 +63,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  pgdata2:
+  pgdata3:
 
