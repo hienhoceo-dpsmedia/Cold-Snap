@@ -7,6 +7,8 @@ ENV GOPROXY=${GOPROXY} \
     GOSUMDB=${GOSUMDB}
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY . .
+# Create output directory
+RUN mkdir -p /out
 # If vendor/ exists, build offline using vendored modules; otherwise download modules.
 RUN if [ -d vendor ]; then \
       echo "Using vendored modules"; \
