@@ -1,25 +1,12 @@
-# syntax=docker/dockerfile:1.6
-FROM golang:1.22 AS builder
+FROM golang:1.22-alpine AS builder
 WORKDIR /app
-ARG GOPROXY=https://proxy.golang.org,direct
-ARG GOSUMDB=sum.golang.org
-ENV GOPROXY=${GOPROXY} \
-    GOSUMDB=${GOSUMDB}
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY go.mod ./
 RUN go mod download
-
 COPY . .
-# Create output directory
-RUN mkdir -p /out
+RUN CGO_ENABLED=0 go build -o /out/cold-snap ./cmd/runner
 
-# Debug: List all Go files and check module
-RUN find . -name "*.go" -type f && echo "=== Module Info ===" && go list -m all && echo "=== Build Test ==="
-
-# Build the application with verbose output
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -ldflags="-w -s" -o /out/cold-snap ./cmd/runner
-
-FROM gcr.io/distroless/base-debian12
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /app
 COPY --from=builder /out/cold-snap /usr/local/bin/cold-snap
 EXPOSE 8080
