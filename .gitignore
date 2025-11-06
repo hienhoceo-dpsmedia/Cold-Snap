@@ -23,3 +23,15 @@ pnpm-lock.yaml
 package-lock.json
 yarn.lock
 
+# Claude/local settings
+.claude/
+*.local.json
+
+# Config files with secrets
+config/
+*.env
+.env.*
+
+# IDE files (keep in local)
+*.code-workspace
+
