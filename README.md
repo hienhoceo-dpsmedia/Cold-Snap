@@ -176,7 +176,17 @@ Configure a webhook trigger at `/webhook/test` - Cold Snap will protect it with 
 2. **Repository URL**: `https://github.com/hienhoceo-dpsmedia/Cold-Snap`
 3. **Reference**: `refs/heads/main`
 4. **Compose path**: `docker-compose.yml`
-5. **Environment Variables**: Set `ADMIN_TOKEN` to a strong random value
+5. **Environment Variables (Repository mode)**
+   - In Portainer's Repository deploy, the key=value editor is not used. Portainer reads variables from a file named `stack.env` at the repo root.
+   - Fork this repo, copy `stack.env.example` to `stack.env`, edit values (at least `ADMIN_TOKEN`), commit, then point Portainer to your fork.
+   - Example `stack.env`:
+     ```env
+     ADMIN_TOKEN=change_me_to_a_strong_random
+     API_PORT=8080
+     RETENTION_DAYS=7
+     DATABASE_URL=postgres://hook:hook@postgres:5432/hook?sslmode=disable
+     REDIS_URL=redis://redis:6379/0
+     ```
 6. **Deploy** 🚀 (services: api on 8080, worker, postgres, redis)
 
 **Step 2: Configure Nginx Proxy Manager**
