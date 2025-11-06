@@ -4,11 +4,19 @@ ARG GOPROXY=https://proxy.golang.org,direct
 ARG GOSUMDB=sum.golang.org
 ENV GOPROXY=${GOPROXY} \
     GOSUMDB=${GOSUMDB}
-COPY go.mod ./
-# Copy go.sum if present to improve reproducibility
-RUN --mount=type=cache,target=/go/pkg/mod go mod download
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY . .
-RUN --mount=type=cache,target=/go/pkg/mod CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/cold-snap ./cmd/runner
+# If vendor/ exists, build offline using vendored modules; otherwise download modules.
+RUN --mount=type=cache,target=/go/pkg/mod bash -c '
+  set -euo pipefail
+  if [ -d vendor ]; then 
+    echo "Using vendored modules"; 
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=vendor -o /out/cold-snap ./cmd/runner; 
+  else 
+    echo "Downloading modules via $GOPROXY"; 
+    go mod download; 
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/cold-snap ./cmd/runner; 
+  fi'
 
 FROM gcr.io/distroless/base-debian12
 WORKDIR /app

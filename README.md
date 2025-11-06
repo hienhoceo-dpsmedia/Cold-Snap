@@ -171,33 +171,47 @@ Configure a webhook trigger at `/webhook/test` - Cold Snap will protect it with 
 
 ### 📋 Portainer + Nginx Proxy Manager
 
-**Step 1: Deploy Stack in Portainer**
+#### Default: Use Prebuilt Images (no build in Portainer)
 
-1. **Stacks** → **Add stack** → **Repository**
-2. **Repository URL**: `https://github.com/hienhoceo-dpsmedia/Cold-Snap`
-3. **Reference**: `refs/heads/main`
-4. **Compose path**: `docker-compose.yml`
-5. **Environment Variables (Repository mode)**
-   - In Portainer's Repository deploy, the key=value editor is not used. Portainer reads variables from a file named `stack.env` at the repo root.
-   - Fork this repo, copy `stack.env.example` to `stack.env`, edit values (at least `ADMIN_TOKEN`), commit, then point Portainer to your fork.
-   - Example `stack.env`:
-     ```env
-     PUBLIC_URL=https://coldsnap.yourdomain.com
-     ADMIN_TOKEN=change_me_to_a_strong_random
-     # Optional basic auth for /console and Admin REST
-     ADMIN_USER=admin
-     ADMIN_PASS=supersecret
-     API_PORT=8080
-     RETENTION_DAYS=7
-     DATABASE_URL=postgres://hook:hook@postgres:5432/hook?sslmode=disable
-     REDIS_URL=redis://redis:6379/0
-     ```
-6. **Deploy** 🚀 (services: api on 8080, worker, postgres, redis)
+1. Push this repo to GitHub (main branch). The included workflow publishes `ghcr.io/<owner>/cold-snap:latest` automatically for your account.
+2. In Portainer: **Stacks** → **Add stack** → **Repository**
+3. Set:
+   - **Repository URL**: `https://github.com/hienhoceo-dpsmedia/Cold-Snap` (or your fork)
+   - **Reference**: `refs/heads/main`
+   - **Compose path**: `docker-compose.image.yml`
+4. Add a `stack.env` file to your repo (Portainer reads this in Repository mode):
+   ```env
+   # Required: the image to pull (use your GHCR user/org)
+   IMAGE=ghcr.io/<your-gh-username>/cold-snap:latest
 
-> Build trouble? If your Portainer host cannot reach the Go module proxy, you can set a different proxy via build args (Repository → Advanced → Build-time variables):
-> - `GOPROXY=https://goproxy.io,direct`
-> - `GOSUMDB=sum.golang.org`
-> Or build the image locally and push to your registry, then replace the `build:` section with `image: <your-registry>/cold-snap:latest`.
+   # Admin access
+   ADMIN_TOKEN=change_me_to_a_strong_random
+   ADMIN_USER=admin
+   ADMIN_PASS=supersecret
+
+   # Public address (for links)
+   PUBLIC_URL=https://coldsnap.yourdomain.com
+
+   # Optional: DB/Redis overrides
+   API_PORT=8080
+   RETENTION_DAYS=7
+   DATABASE_URL=postgres://hook:hook@postgres:5432/hook?sslmode=disable
+   REDIS_URL=redis://redis:6379/0
+   ```
+5. Deploy 🚀 (services: api on 8080, worker, postgres, redis)
+
+> Tip: If you prefer Docker Hub, set `IMAGE=<your-dockerhub-username>/cold-snap:latest` and push there.
+
+#### Alternative: Build From Repository (only if you want to build in Portainer)
+
+If you must build in Portainer, switch the compose path to `docker-compose.yml`. In restricted networks add to `stack.env` (or Portainer build args):
+
+```env
+GOPROXY=https://goproxy.io,direct
+GOSUMDB=sum.golang.org
+```
+
+Portainer passes these to the build automatically. Otherwise use the prebuilt image flow above.
 
 **Step 2: Configure Nginx Proxy Manager**
 
