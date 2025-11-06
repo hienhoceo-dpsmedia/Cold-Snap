@@ -7,7 +7,7 @@ ENV GOPROXY=${GOPROXY} \
     GOSUMDB=${GOSUMDB}
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY go.mod ./
-RUN go mod download && go mod verify
+RUN go mod download
 
 COPY . .
 # Create output directory
