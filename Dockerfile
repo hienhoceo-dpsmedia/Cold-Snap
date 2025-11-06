@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.6
 FROM golang:1.22 AS builder
 WORKDIR /app
 ARG GOPROXY=https://proxy.golang.org,direct
@@ -7,16 +8,7 @@ ENV GOPROXY=${GOPROXY} \
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY . .
 # If vendor/ exists, build offline using vendored modules; otherwise download modules.
-RUN --mount=type=cache,target=/go/pkg/mod bash -c '
-  set -euo pipefail
-  if [ -d vendor ]; then 
-    echo "Using vendored modules"; 
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=vendor -o /out/cold-snap ./cmd/runner; 
-  else 
-    echo "Downloading modules via $GOPROXY"; 
-    go mod download; 
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/cold-snap ./cmd/runner; 
-  fi'
+RUN --mount=type=cache,target=/go/pkg/mod bash -c 'set -euo pipefail; if [ -d vendor ]; then echo "Using vendored modules"; CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=vendor -o /out/cold-snap ./cmd/runner; else echo "Downloading modules via $GOPROXY"; go mod download; CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/cold-snap ./cmd/runner; fi'
 
 FROM gcr.io/distroless/base-debian12
 WORKDIR /app
