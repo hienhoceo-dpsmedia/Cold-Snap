@@ -292,6 +292,7 @@ func (w *Worker) deliver(ctx context.Context, d destRow, e evtRow) (int, map[str
     // dynamic headers
     req.Header.Set("X-Source-Id", e.SourceID)
     req.Header.Set("X-Event-Id", e.EventID)
+    if rid := e.Headers["x-request-id"]; rid != "" { req.Header.Set("X-Request-Id", rid) }
     if d.Secret != nil && *d.Secret != "" {
         ts := fmt.Sprintf("%d", time.Now().Unix())
         mac := hmac.New(sha256.New, []byte(*d.Secret))

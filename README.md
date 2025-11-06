@@ -75,6 +75,7 @@ docker compose up --build
 - 🗄️ **PostgreSQL**: `localhost:5432` (user: `hook`, password: `hook`, db: `hook`)
 - 🚦 **Redis**: `localhost:6379`
 - ⚙️ **Worker**: Background delivery processor
+- ✅ **Health**: `/healthz` (liveness) and `/readyz` (readiness)
 
 ---
 

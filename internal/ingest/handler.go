@@ -10,6 +10,7 @@ import (
     "io"
     "net"
     "net/http"
+    "net/url"
     "strconv"
     "strings"
     "time"
@@ -36,6 +37,7 @@ func (s *Server) Routes(mux *http.ServeMux) {
     mux.HandleFunc("/ingest", s.handleIngest)
     mux.HandleFunc("/ingest/", s.handleIngestPath)
     mux.HandleFunc("/events/", s.handleEvents)
+    mux.HandleFunc("/readyz", s.handleReady)
     if s.AdminToken != "" {
         mux.HandleFunc("/admin/sources", s.adminSources)
         mux.HandleFunc("/admin/sources/", s.adminSourcesSub)
@@ -45,7 +47,7 @@ func (s *Server) Routes(mux *http.ServeMux) {
         mux.HandleFunc("/admin/events", s.adminEvents)
         mux.HandleFunc("/admin/attempts", s.adminAttempts)
         // Static admin console; require Basic auth if ADMIN_USER/ADMIN_PASS are set
-        h := http.StripPrefix("/console/", adminHandler())
+        h := http.StripPrefix("/console/", withStaticSecurityHeaders(adminHandler()))
         if s.AdminUser != "" {
             h = basicAuth(h, s.AdminUser, s.AdminPass)
         }
@@ -157,6 +159,16 @@ func basicAuth(next http.Handler, user, pass string) http.Handler {
     })
 }
 
+func withStaticSecurityHeaders(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("X-Content-Type-Options", "nosniff")
+        w.Header().Set("Referrer-Policy", "no-referrer")
+        w.Header().Set("Cache-Control", "no-store")
+        w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'")
+        next.ServeHTTP(w, r)
+    })
+}
+
 // POST/GET /admin/sources
 func (s *Server) adminSources(w http.ResponseWriter, r *http.Request) {
     if !s.checkAdmin(w, r) { return }
@@ -247,6 +259,9 @@ func (s *Server) adminDestinations(w http.ResponseWriter, r *http.Request) {
         }
         if err := json.NewDecoder(r.Body).Decode(&req); err != nil { http.Error(w, "bad json", 400); return }
         if req.Name == "" || req.URL == "" { http.Error(w, "name and url required", 400); return }
+        if u, err := url.Parse(req.URL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+            http.Error(w, "url must be absolute http(s)", 400); return
+        }
         hdrJSON, _ := json.Marshal(req.Headers)
         cto := 5; if req.ConnectTimeoutS != nil { cto = *req.ConnectTimeoutS }
         to := 15; if req.TimeoutS != nil { to = *req.TimeoutS }
@@ -449,6 +464,10 @@ func (s *Server) handleIngestWithToken(w http.ResponseWriter, r *http.Request, t
         return
     }
     ctx := r.Context()
+    // Request ID for tracing
+    rid := r.Header.Get("X-Request-Id")
+    if rid == "" { rid = uuid.Must(uuid.NewV4()).String() }
+    w.Header().Set("X-Request-Id", rid)
     src, err := s.lookupSource(ctx, token)
     if err != nil {
         if errors.Is(err, sql.ErrNoRows) {
@@ -484,6 +503,8 @@ func (s *Server) handleIngestWithToken(w http.ResponseWriter, r *http.Request, t
     }
     contentType := r.Header.Get("Content-Type")
     hdrs := canonicalHeaders(r.Header)
+    // Ensure request id is stored with event headers for end-to-end tracing
+    hdrs["x-request-id"] = rid
     hdrJSON, _ := json.Marshal(hdrs)
     idk := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
     var idempotencyKey *string
@@ -548,6 +569,17 @@ func (s *Server) handleIngestWithToken(w http.ResponseWriter, r *http.Request, t
     w.Header().Set("Content-Type", "application/json")
     w.WriteHeader(http.StatusAccepted)
     _ = json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
+    ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+    defer cancel()
+    if err := s.DB.Ping(ctx); err != nil {
+        http.Error(w, "db not ready", http.StatusServiceUnavailable)
+        return
+    }
+    w.WriteHeader(http.StatusOK)
+    _, _ = w.Write([]byte("ok"))
 }
 
 type sourceRow struct {

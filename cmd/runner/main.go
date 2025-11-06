@@ -57,12 +57,20 @@ func main() {
         srv.Routes(mux)
         addr := fmt.Sprintf(":%d", cfg.APIPort)
         logger("api_listen", "addr", addr)
-        srv := &http.Server{Addr: addr, Handler: mux}
+        srvHTTP := &http.Server{
+            Addr:              addr,
+            Handler:           mux,
+            ReadHeaderTimeout: 5 * time.Second,
+            ReadTimeout:       15 * time.Second,
+            WriteTimeout:      30 * time.Second,
+            IdleTimeout:       60 * time.Second,
+            MaxHeaderBytes:    1 << 20, // 1 MiB
+        }
         go func() {
             <-ctx.Done()
-            _ = srv.Shutdown(context.Background())
+            _ = srvHTTP.Shutdown(context.Background())
         }()
-        if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+        if err := srvHTTP.ListenAndServe(); err != nil && err != http.ErrServerClosed {
             log.Fatalf("listen: %v", err)
         }
     case "worker":
