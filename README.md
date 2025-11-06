@@ -1,240 +1,465 @@
-# Cold Snap — Smart webhook throttling that keeps your n8n cool under pressure
+<div align="center">
 
-Cold Snap is a minimal, self-hosted webhook gateway that fronts n8n (or any app) to enforce webhook rate limits, retries, and safety — keeping your workflows cool under pressure.
+# 🧊 Cold Snap
 
-What’s implemented now (MVP):
-- Postgres schema + auto-migrations on start
-- Ingest API: `POST /ingest/{token}` or `POST /ingest` with `Authorization: Bearer <token>`
-- Event persistence: raw body, headers, content-type, source IP, optional Idempotency-Key
-- Request fidelity: stores `method`, relative `path` (after `/ingest/{token}`), and `query`
-- Attempt fan-out: one `delivery_attempt` per enabled route (simple content-type LIKE filter)
-- Worker: PG `FOR UPDATE SKIP LOCKED` loop, SSRF guard with IP pinning, HTTP delivery with timeouts
-- Redis: token-bucket rate limiter + max inflight per destination
-- Basic circuit breaker counters and open-until deferral (cooldown)
-- Optional path passthrough: destination can `append_path` to forward inbound path/query
-- Replay: `POST /events/{event_id}/replay` creates fresh attempts
-- Retention: worker cleans up events older than `RETENTION_DAYS` (default 7) with no in-flight attempts
+[![Go](https://img.shields.io/badge/Go-00ADD8?style=flat-square&logo=go&logoColor=white)](https://golang.org/)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-336791?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
-Not yet: Admin UI/CRUD, metrics, traces. Easy to add next.
+**Smart webhook throttling that keeps your n8n cool under pressure** ❄️
 
-## Run with Docker Compose
+A minimal, self-hosted webhook gateway that fronts n8n (or any app) to enforce webhook rate limits, retries, and safety — keeping your workflows running smoothly under pressure.
 
-```
-# Build and start (Docker)
+[🚀 Quick Start](#-quick-start) • [📖 Documentation](#-documentation) • [🎯 Features](#-features) • [🔧 Configuration](#-configuration)
+
+</div>
+
+## 🎯 About Cold Snap
+
+### 🔒 Branding & Independence
+- **n8n Focused**: The branding references n8n because many users need to protect n8n webhooks
+- **Zero Integration Required**: Cold Snap does not integrate with or require access to n8n internals
+- **Smart Proxy**: Acts as an intelligent reverse proxy with buffering, backpressure, and retries
+- **Secure**: You never share n8n credentials/keys/tokens with Cold Snap
+- **Universal**: Works with any webhook consumer (n8n, Zapier, custom apps, internal APIs)
+
+---
+
+## ✨ Features
+
+### 🚀 **Core MVP Features**
+- 🗄️ **PostgreSQL** schema with auto-migrations on startup
+- 📥 **Ingest API**: `POST /ingest/{token}` or `POST /ingest` with `Authorization: Bearer <token>`
+- 💾 **Event Persistence**: Raw body, headers, content-type, source IP, optional Idempotency-Key
+- 🔍 **Request Fidelity**: Stores `method`, relative `path`, and `query` parameters
+- 🎯 **Smart Routing**: One delivery attempt per enabled route with content-type filtering
+- ⚡ **High-Performance Worker**: PostgreSQL `FOR UPDATE SKIP LOCKED` loop with SSRF protection
+- 🚦 **Rate Limiting**: Redis-based token-bucket limiter + max inflight control per destination
+- 🛡️ **Circuit Breaker**: Automatic protection with cooldown and retry logic
+- 🔄 **Path Passthrough**: Destination can `append_path` to forward inbound path/query
+- 🔁 **Event Replay**: `POST /events/{event_id}/replay` creates fresh delivery attempts
+- 🧹 **Auto Cleanup**: Worker removes events older than `RETENTION_DAYS` (default 7)
+
+### 🎨 **Admin Interface**
+- 🌐 **Web UI**: Modern admin console for monitoring and management
+- 📊 **Real-time Dashboard**: Live webhook status and metrics
+- 🔧 **Management**: Create/edit sources, destinations, and routes via UI
+- 📱 **Responsive**: Works on desktop and mobile devices
+
+### 🛠️ **Coming Soon**
+- 📈 **Advanced Metrics**: Prometheus integration and detailed analytics
+- 🔍 **Request Tracing**: End-to-end webhook flow visualization
+- 🎛️ **Enhanced Routing**: Advanced filters and conditional logic
+- 🔄 **Retry Strategies**: Configurable backoff and retry policies
+
+## 🚀 Quick Start
+
+### 🐳 Docker Compose (Recommended)
+
+```bash
+# Clone and build
+git clone https://github.com/hienhoceo-dpsmedia/Cold-Snap.git
+cd Cold-Snap
+
+# Build and start all services
 docker compose up --build
 
 # API available at http://localhost:8080/healthz
+# Admin UI available at http://localhost:8080/console/
 ```
 
-Postgres is exposed on `localhost:5432` (user `hook`, password `hook`, db `hook`).
+**📊 Services Started:**
+- 🌐 **API Server**: `http://localhost:8080`
+- 🗄️ **PostgreSQL**: `localhost:5432` (user: `hook`, password: `hook`, db: `hook`)
+- 🚦 **Redis**: `localhost:6379`
+- ⚙️ **Worker**: Background delivery processor
 
-## Seeding minimal data
+---
 
-Connect to Postgres and create a source, destination, and route:
+## 🌱 Quick Setup
 
-```
-psql postgres://hook:hook@localhost:5432/hook <<'SQL'
+### Option 1: **Use the Admin UI** 🎨
+
+1. Open `http://localhost:8080/console/` in your browser
+2. Enter your admin token (or use the default)
+3. Create sources, destinations, and routes via the web interface
+
+### Option 2: **Database Setup** 💾
+
+Connect to PostgreSQL and create test data:
+
+```sql
+-- Connect to database
+psql postgres://hook:hook@localhost:5432/hook
+
+-- Create a source with authentication token
 INSERT INTO source (name, token) VALUES ('demo-source', 'demo_token')
   ON CONFLICT (name) DO UPDATE SET token=EXCLUDED.token;
 
+-- Create a destination (where webhooks get delivered)
 INSERT INTO destination (name, url, headers, secret, max_rps, burst, max_inflight)
 VALUES ('echo-dest', 'https://postman-echo.com/post', '{"X-Static": "1"}', NULL, 5.0, 5, 3)
   ON CONFLICT (name) DO UPDATE SET url=EXCLUDED.url;
 
+-- Create a route (maps source → destination)
 INSERT INTO route (source_id, destination_id, enabled, content_type_like)
 SELECT s.source_id, d.destination_id, true, 'application/json%'
 FROM source s, destination d
 WHERE s.name='demo-source' AND d.name='echo-dest'
 ON CONFLICT (source_id, destination_id) DO NOTHING;
-SQL
 ```
 
-## Send a test webhook
+---
 
-```
+## 🧪 Test Your Setup
+
+### Send a Test Webhook
+
+```bash
 curl -i -X POST \
   -H 'Content-Type: application/json' \
-  -d '{"hello":"world"}' \
+  -d '{"hello":"world","timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}' \
   http://localhost:8080/ingest/demo_token
 ```
 
-You should see `202 Accepted` and attempts created. The worker will deliver to the destination with rate limiting and SSRF guard.
+**✅ Expected Response:** `202 Accepted`
+The worker will deliver the webhook to your destination with rate limiting and SSRF protection.
 
-## n8n Quickstart
+---
 
-Run gateway + n8n locally (adds an n8n container) and seed a route that forwards to n8n with path passthrough.
+## 🔥 n8n Integration (Zero Setup Required!)
 
-```
+### Quick Start with n8n
+
+```bash
+# Start gateway + n8n together
 npm run up:n8n
 npm run seed:n8n
 
-# Then send a webhook to the gateway; it forwards to n8n:
+# Send webhook to gateway (forwards to n8n)
 curl -i -X POST \
   -H 'Content-Type: application/json' \
-  -d '{"hello":"n8n"}' \
+  -d '{"hello":"n8n","workflow":"test"}' \
   http://localhost:8080/ingest/n8n_token/webhook/test
-
-# The path after /ingest/n8n_token (here /webhook/test) is appended to the n8n base URL
 ```
 
-Open n8n at http://localhost:5678 and configure a Test Webhook (e.g. `/webhook/test`). The gateway will protect n8n with rate limiting and retries.
+🎯 **Open n8n**: http://localhost:5678
+Configure a webhook trigger at `/webhook/test` - Cold Snap will protect it with rate limiting and retries.
 
-Note: This project is not affiliated with n8n GmbH. “n8n” is a trademark of its respective owner.
+### 🔧 n8n Setup Options
 
-## Quick Install (Portainer + Nginx Proxy Manager)
+#### Option A: Full URL
+- **Destination URL**: `https://n8n.example.com/webhook/<your-id>`
+- **Append Path**: `false`
+- **Result**: Direct forwarding to specific webhook
 
-Two steps: 1) deploy the stack in Portainer, 2) publish your domain with Nginx Proxy Manager (NPM).
+#### Option B: Base URL + Path Forwarding ⭐
+- **Destination URL**: `https://n8n.example.com`
+- **Append Path**: `true`
+- **Result**: `POST /ingest/token/webhook/test` → `https://n8n.example.com/webhook/test`
 
-Step 1 — Portainer stack (from Git)
-- Stacks → Add stack → Repository
-- Repository URL: `https://github.com/<you>/Cold-Snap`
-- Reference: `refs/heads/main`
-- Compose path: `docker-compose.yml`
-- Environment variables: set `ADMIN_TOKEN` to a strong random value
-- Deploy (services: api on 8080, worker, postgres, redis)
+> 💡 **Security First**: You never share n8n credentials with Cold Snap. It only forwards HTTP requests to your webhook URLs.
 
-Step 2 — Nginx Proxy Manager (proxy host)
+> ⚠️ **Disclaimer**: This project is not affiliated with n8n GmbH. "n8n" is a trademark of its respective owner.
 
-Option A — shared Docker network (recommended)
-1. Portainer → Networks → Add network → name: `npm_proxy`
-2. Add an extra compose file when deploying: `docker-compose.npm.yml`
-3. In NPM: Hosts → Proxy Hosts → Add
-   - Domain Names: `coldsnap.yourdomain.com`
-   - Scheme: `http`
-   - Forward Hostname/IP: `api`
-   - Forward Port: `8080`
-   - Advanced → Custom Nginx: `client_max_body_size 10m;`
-   - SSL: Request a new certificate → Force SSL (optional)
+---
 
-Option B — no shared network
-- Forward Hostname/IP: your server’s LAN IP (or docker bridge `172.17.0.1`)
-- Forward Port: `8080`
+## 🏗️ Production Deployment
+
+### 📋 Portainer + Nginx Proxy Manager
+
+**Step 1: Deploy Stack in Portainer**
+
+1. **Stacks** → **Add stack** → **Repository**
+2. **Repository URL**: `https://github.com/hienhoceo-dpsmedia/Cold-Snap`
+3. **Reference**: `refs/heads/main`
+4. **Compose path**: `docker-compose.yml`
+5. **Environment Variables**: Set `ADMIN_TOKEN` to a strong random value
+6. **Deploy** 🚀 (services: api on 8080, worker, postgres, redis)
+
+**Step 2: Configure Nginx Proxy Manager**
+
+#### Option A: Shared Docker Network ⭐ (Recommended)
+```bash
+# Create shared network
+docker network create npm_proxy
+
+# Use docker-compose.npm.yml for extra network configuration
+```
+
+In **NPM**: **Hosts** → **Proxy Hosts** → **Add**
+- **Domain Names**: `coldsnap.yourdomain.com`
+- **Scheme**: `http`
+- **Forward Hostname/IP**: `api`
+- **Forward Port**: `8080`
+- **Advanced** → **Custom Nginx**: `client_max_body_size 10m;`
+- **SSL**: Request certificate → Force SSL (recommended)
+
+#### Option B: Direct IP
+- **Forward Hostname/IP**: Your server's LAN IP (e.g., `172.17.0.1`)
+- **Forward Port**: `8080`
 - Same SSL and Advanced settings as above
 
-Verify: open `https://coldsnap.yourdomain.com/healthz`
+**✅ Verify**: Open `https://coldsnap.yourdomain.com/healthz`
 
-UI alternative: Open your domain `/console/` and use the Admin Console to create Sources, Destinations, and Routes (paste your `ADMIN_TOKEN` at the top). This avoids manual SQL.
+> 💡 **Pro Tip**: Use the web UI at `/console/` to manage sources, destinations, and routes - no SQL required!
 
-## Admin REST (create sources/destinations/routes)
+---
 
-Cold Snap can run independently of n8n. You can create multiple sources (tokens) and map them to destinations with per‑destination controls. Protect admin endpoints with `ADMIN_TOKEN` env and call with `Authorization: Bearer <token>`.
+## 🛠️ API Documentation
 
-- Create source
-```
+### 🔐 Admin REST API
+
+Protect admin endpoints with `ADMIN_TOKEN` environment variable and authenticate using `Authorization: Bearer <token>`.
+
+#### 📥 Create Source
+```bash
 curl -s -X POST http://localhost:8080/admin/sources \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"name":"shopify","max_body_bytes":1048576}'
+  -d '{
+    "name": "shopify",
+    "max_body_bytes": 1048576
+  }'
 ```
-- List sources: `curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/admin/sources`
 
-- Create destination
-```
+#### 📤 Create Destination
+```bash
 curl -s -X POST http://localhost:8080/admin/destinations \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{
-    "name":"internal-api",
-    "url":"https://example.com/hooks",
-    "headers": {"X-App":"ColdSnap"},
+    "name": "internal-api",
+    "url": "https://example.com/hooks",
+    "headers": {"X-App": "ColdSnap"},
     "max_rps": 2.0,
     "burst": 5,
     "max_inflight": 2,
     "append_path": true
   }'
 ```
-- List destinations: `curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/admin/destinations`
 
-- Create route (map source → destination)
-```
+#### 🔗 Create Route (Connect Source → Destination)
+```bash
 curl -s -X POST http://localhost:8080/admin/routes \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"source_name":"shopify","destination_name":"internal-api","content_type_like":"application/json%"}'
+  -d '{
+    "source_name": "shopify",
+    "destination_name": "internal-api",
+    "content_type_like": "application/json%"
+  }'
 ```
-- List routes: `curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/admin/routes`
 
-Now send webhooks to `POST /ingest/{token}` for any created source; the worker delivers to mapped destinations with rate limits, retries, and SSRF guard.
+#### 📋 List Resources
+```bash
+# List all sources
+curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
+  http://localhost:8080/admin/sources
 
-## Install/run using npm scripts
+# List all destinations
+curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
+  http://localhost:8080/admin/destinations
+
+# List all routes
+curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
+  http://localhost:8080/admin/routes
+```
+
+### 📡 Ingest API
+Send webhooks to `POST /ingest/{token}` for any created source. The worker delivers to mapped destinations with:
+
+- ✅ **Rate limiting** and **retry logic**
+- ✅ **SSRF protection** and **security guards**
+- ✅ **Event persistence** and **replay capabilities**
+
+---
+
+## 🚀 Development Setup
+
+### 📦 Using NPM Scripts
 
 If you prefer npm to wrap Docker Compose:
 
+```bash
+npm run up          # 🚀 build and start all services
+npm run logs        # 📋 follow logs
+npm run seed        # 🌱 seed demo source/destination/route
+npm run down        # 🛑 stop and remove containers + volumes
+npm run up:n8n      # 🔥 start with n8n integration
+npm run seed:n8n    # 🌱 seed n8n demo data
 ```
-npm run up          # build and start all services
-npm run logs        # follow logs
-npm run seed        # seed demo source/destination/route
-npm run down        # stop and remove containers + volumes
+
+**Requirements:**
+- 🐳 Docker Engine
+- 🟢 Node.js (>=18)
+- The npm scripts are convenient wrappers around `docker compose`
+
+---
+
+## 🌍 Custom Domain Setup
+
+### 🔧 Manual Nginx Deployment
+
+Deploy Cold Snap on your own domain with this step-by-step guide:
+
+#### 1️⃣ DNS Configuration
+```bash
+# Create A/AAAA record pointing to your server
+coldsnap.yourdomain.com → YOUR_SERVER_IP
 ```
 
-Requirements: Docker Engine and Node.js (>=18). The npm scripts just call `docker compose` under the hood.
+#### 2️⃣ Server Prerequisites
+```bash
+# Ubuntu/Debian example
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo apt-get install docker-compose-plugin
 
-## Install on Your Domain (Nginx)
+# Install Node.js 18+
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+nvm install 18
 
-This example shows how to serve Cold Snap at `http://coldsnap.dpsmedia.vn/` (and optionally HTTPS) while running services via npm/Compose.
-
-1) DNS
-- Create an A/AAAA record for `coldsnap.dpsmedia.vn` pointing to your server.
-
-2) Server prerequisites
-- Ubuntu/Debian example:
-  - Install Docker and Compose plugin (per Docker docs)
-  - Install Node.js 18+ (e.g., via nvm)
-  - Install Nginx: `sudo apt-get install nginx`
-
-3) Clone and start Cold Snap
+# Install Nginx
+sudo apt-get update && sudo apt-get install nginx
 ```
-git clone https://github.com/<you>/Cold-Snap.git
+
+#### 3️⃣ Deploy Cold Snap
+```bash
+# Clone and setup
+git clone https://github.com/hienhoceo-dpsmedia/Cold-Snap.git
 cd Cold-Snap
 
-# Optional: create a .env (Compose will read it) to set secrets/ports
+# Create environment file
 cat > .env <<EOF
 ADMIN_TOKEN=$(openssl rand -hex 16)
 API_PORT=8080
 RETENTION_DAYS=7
 EOF
 
+# Start services
 npm run up
 ```
 
-4) Configure Nginx reverse proxy
-- Copy `deploy/nginx.coldsnap.example.conf` to `/etc/nginx/sites-available/coldsnap.conf` and adjust `server_name` and `client_max_body_size`.
-- Symlink and reload:
-```
-sudo ln -s /etc/nginx/sites-available/coldsnap.conf /etc/nginx/sites-enabled/coldsnap.conf
+#### 4️⃣ Configure Nginx Reverse Proxy
+```bash
+# Copy and customize Nginx config
+sudo cp deploy/nginx.coldsnap.example.conf /etc/nginx/sites-available/coldsnap.conf
+
+# Edit server_name and settings
+sudo nano /etc/nginx/sites-available/coldsnap.conf
+
+# Enable site
+sudo ln -s /etc/nginx/sites-available/coldsnap.conf /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
-```
-- You should now reach the API at `http://coldsnap.dpsmedia.vn/healthz`.
 
-5) Optional HTTPS with Let’s Encrypt (certbot)
+# Test: http://coldsnap.yourdomain.com/healthz ✅
 ```
+
+#### 5️⃣ Enable HTTPS with Let's Encrypt
+```bash
 sudo apt-get install certbot python3-certbot-nginx
-sudo certbot --nginx -d coldsnap.dpsmedia.vn
+sudo certbot --nginx -d coldsnap.yourdomain.com
 ```
-Certbot updates the Nginx conf to redirect HTTP→HTTPS and install certs.
 
-6) Create sources/destinations via Admin REST
-- Set your admin token: `export ADMIN_TOKEN=$(grep ADMIN_TOKEN .env | cut -d= -f2)`
-- Follow the Admin REST examples below to create sources, destinations, and routes.
+#### 6️⃣ Configure via Admin API
+```bash
+export ADMIN_TOKEN=$(grep ADMIN_TOKEN .env | cut -d= -f2)
+# Follow API examples above to create sources, destinations, routes
+```
 
-Notes
-- Keep Nginx `client_max_body_size` ≥ the per‑source `max_body_bytes` (default 1 MiB).
-- If you expose only HTTPS externally, keep Compose ports internal and proxy to `127.0.0.1:8080`.
-- Health: `/healthz` on your domain; Ingest: `/ingest/{token}`.
+### 💡 Production Tips
+- **Body Size**: Keep Nginx `client_max_body_size` ≥ source `max_body_bytes` (default 1MB)
+- **Security**: For HTTPS-only, proxy to `127.0.0.1:8080` instead of exposing ports
+- **Monitoring**: Use `/healthz` for health checks and `/console/` for management
 
-## Configuration
+---
 
-- `ROLE`: `api` or `worker` (Docker Compose runs both)
-- `API_PORT`: default 8080
-- `DATABASE_URL`: Postgres connection string
-- `REDIS_URL`: Redis connection string
-- `WORKER_NAME`, `WORKER_VERSION`: optional labels
-- `RETENTION_DAYS`: default 7 (worker)
+## ⚙️ Configuration
 
-## Next steps
+### Environment Variables
+```bash
+# Core Service Configuration
+ROLE=api|worker                    # Service role (Docker Compose runs both)
+API_PORT=8080                     # API server port
+ADMIN_TOKEN=your_secret_token     # Admin authentication token
 
-- Admin REST + UI (React Admin)
-- Retry metrics and Prometheus export
-- Rich routing filters and replay endpoints
-- Health window sliding/housekeeping
- - Destination ordering and fallback (first/all)
+# Database Configuration
+DATABASE_URL=postgres://...       # PostgreSQL connection string
+REDIS_URL=redis://...             # Redis connection string
+
+# Worker Configuration
+WORKER_NAME=worker-1              # Optional worker identifier
+WORKER_VERSION=v1.0.0             # Optional version label
+RETENTION_DAYS=7                  # Event retention period (default: 7)
+
+# Performance Tuning
+MAX_WORKERS=10                    # Maximum concurrent workers
+BATCH_SIZE=100                    # Event processing batch size
+TIMEOUT_SECONDS=30                # Request timeout
+```
+
+### 🚀 Advanced Configuration
+- **Rate Limiting**: Per-destination `max_rps`, `burst`, and `max_inflight`
+- **Circuit Breaking**: Automatic failure detection and recovery
+- **SSRF Protection**: IP whitelisting and network security
+- **Retry Logic**: Configurable backoff strategies (coming soon)
+
+---
+
+## 🗺️ Roadmap
+
+### ✅ **Completed (MVP)**
+- [x] Core webhook ingestion and delivery
+- [x] PostgreSQL event persistence
+- [x] Redis rate limiting
+- [x] Basic admin REST API
+- [x] Web admin console
+- [x] Docker deployment
+
+### 🚧 **In Development**
+- [ ] Advanced retry strategies
+- [ ] Prometheus metrics
+- [ ] Enhanced routing filters
+
+### 🎯 **Coming Soon**
+- [ ] **Advanced Analytics**: Request tracing and detailed metrics
+- [ ] **Enhanced Security**: IP whitelisting and advanced SSRF protection
+- [ ] **Smart Routing**: Conditional logic and advanced filters
+- [ ] **High Availability**: Multi-node clustering and failover
+- [ ] **Integration Hub**: Pre-built connectors for popular services
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+
+### Development Setup
+```bash
+git clone https://github.com/hienhoceo-dpsmedia/Cold-Snap.git
+cd Cold-Snap
+npm run up
+# Make your changes...
+npm run test  # Coming soon
+```
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🧊 **Cold Snap** - Keep Your Webhooks Cool
+
+Made with ❄️ for reliable webhook delivery
+
+<div align="center">
+
+[🚀 Get Started](#-quick-start) • [📖 Documentation](#-documentation) • [🔧 Configuration](#-configuration) • [🤝 Contributing](#-contributing)
+
+</div>
