@@ -6,7 +6,6 @@ import (
     "database/sql"
     "encoding/json"
     "errors"
-    "fmt"
     "io"
     "net"
     "net/http"
@@ -555,7 +554,7 @@ func (s *Server) handleIngestWithToken(w http.ResponseWriter, r *http.Request, t
             JOIN source s ON s.source_id = r.source_id
             WHERE s.token=$2 AND r.enabled=true
               AND (r.content_type_like IS NULL OR $3 LIKE r.content_type_like)
-        `, eventID, token, contentType)
+        `, eventIDStr, token, contentType)
         if err != nil {
             s.Logger("attempts_insert_error", "error", err)
             http.Error(w, "internal error", http.StatusInternalServerError)

@@ -13,7 +13,6 @@ import (
     "io"
     "net"
     "net/http"
-    "net/netip"
     "net/url"
     "os"
     "strings"
