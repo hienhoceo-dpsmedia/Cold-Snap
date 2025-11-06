@@ -235,6 +235,27 @@ redis-cli -p 16379
 
 If you need different ports, just update `PG_PORT` and `REDIS_PORT` in `stack.env`.
 
+#### 🔄 Database Connection Issues
+
+If you see "connection refused" errors during startup:
+
+**Issue**: Application starting before database is ready.
+
+**Solution**: The latest update includes health checks that ensure PostgreSQL and Redis are fully started before the application begins:
+
+- ✅ **Health Checks**: PostgreSQL and Redis wait until healthy
+- ✅ **Smart Dependencies**: API/Worker wait for database readiness
+- ✅ **Auto Restart**: Services restart if they fail
+
+**Manual Verification**:
+```bash
+# Check container logs in Portainer
+# Look for "Database connected successfully" message
+
+# Test database connection manually
+docker exec -it coldsnap-postgres-1 psql -U hook -d hook -c "SELECT 1;"
+```
+
 #### Alternative: Build From Repository (only if you want to build in Portainer)
 
 If you must build in Portainer, switch the compose path to `docker-compose.yml`. In restricted networks add to `stack.env` (or Portainer build args):

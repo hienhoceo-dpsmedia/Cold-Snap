@@ -11,11 +11,21 @@ services:
       - "${PG_PORT:-15432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hook} -d ${POSTGRES_DB:-hook}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7
     ports:
       - "${REDIS_PORT:-16379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
 
   api:
     image: ${IMAGE:-ghcr.io/OWNER/cold-snap:latest}
@@ -29,10 +39,13 @@ services:
       ADMIN_PASS: "${ADMIN_PASS:-}"
       PUBLIC_URL: "${PUBLIC_URL:-}"
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     ports:
       - "8080:8080"
+    restart: unless-stopped
 
   worker:
     image: ${IMAGE:-ghcr.io/OWNER/cold-snap:latest}
@@ -42,8 +55,11 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       RETENTION_DAYS: "${RETENTION_DAYS:-7}"
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   pgdata:
