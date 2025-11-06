@@ -13,8 +13,11 @@ COPY . .
 # Create output directory
 RUN mkdir -p /out
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /out/cold-snap ./cmd/runner
+# Debug: List all Go files and check module
+RUN find . -name "*.go" -type f && echo "=== Module Info ===" && go list -m all && echo "=== Build Test ==="
+
+# Build the application with verbose output
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -ldflags="-w -s" -o /out/cold-snap ./cmd/runner
 
 FROM gcr.io/distroless/base-debian12
 WORKDIR /app
