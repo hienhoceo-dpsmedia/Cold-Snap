@@ -256,6 +256,35 @@ If you see "connection refused" errors during startup:
 docker exec -it coldsnap-postgres-1 psql -U hook -d hook -c "SELECT 1;"
 ```
 
+#### 🔐 Password Authentication Failed
+
+If you see "password authentication failed for user 'hook'":
+
+**Issue**: Database was created with different credentials than current configuration.
+
+**Solutions**:
+
+**Option 1: Clean Slate (Recommended)**
+1. In Portainer: Remove the stack
+2. Volumes → Delete the `pgdata` volume
+3. Redeploy the stack (creates fresh database with correct credentials)
+
+**Option 2: Check Current Credentials**
+```bash
+# Verify what credentials Portainer is using
+# Check stack.env in Portainer environment variables:
+# POSTGRES_USER=hook
+# POSTGRES_PASSWORD=hook
+# POSTGRES_DB=hook
+```
+
+**Option 3: Connect with Different Credentials**
+If you have existing data and know the old password:
+```bash
+# Connect with old password
+docker exec -it coldsnap-postgres-1 psql -U hook -d hook -c "ALTER USER hook PASSWORD 'hook';"
+```
+
 #### Alternative: Build From Repository (only if you want to build in Portainer)
 
 If you must build in Portainer, switch the compose path to `docker-compose.yml`. In restricted networks add to `stack.env` (or Portainer build args):
