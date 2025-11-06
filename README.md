@@ -113,7 +113,7 @@ Option B — no shared network
 
 Verify: open `https://coldsnap.yourdomain.com/healthz`
 
-Seed (optional): in Portainer → Containers → postgres → Console → `psql -U hook -d hook`, paste `seeds/demo.sql`. For n8n demo use `seeds/n8n-demo.sql`.
+UI alternative: Open your domain `/console/` and use the Admin Console to create Sources, Destinations, and Routes (paste your `ADMIN_TOKEN` at the top). This avoids manual SQL.
 
 ## Admin REST (create sources/destinations/routes)
 

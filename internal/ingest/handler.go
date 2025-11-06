@@ -10,12 +10,14 @@ import (
     "io"
     "net"
     "net/http"
+    "strconv"
     "strings"
     "time"
 
     "github.com/gofrs/uuid/v5"
     "github.com/jackc/pgx/v5"
     "github.com/jackc/pgx/v5/pgxpool"
+    adminui "cold-snap/internal/admin"
 )
 
 type Server struct {
@@ -34,11 +36,19 @@ func (s *Server) Routes(mux *http.ServeMux) {
     mux.HandleFunc("/events/", s.handleEvents)
     if s.AdminToken != "" {
         mux.HandleFunc("/admin/sources", s.adminSources)
+        mux.HandleFunc("/admin/sources/", s.adminSourcesSub)
         mux.HandleFunc("/admin/destinations", s.adminDestinations)
         mux.HandleFunc("/admin/routes", s.adminRoutes)
+        mux.HandleFunc("/admin/routes/", s.adminRoutesSub)
+        mux.HandleFunc("/admin/events", s.adminEvents)
+        mux.HandleFunc("/admin/attempts", s.adminAttempts)
+        // Static admin console (no token required to load; API is protected)
+        mux.Handle("/console/", http.StripPrefix("/console/", adminHandler()))
     }
     mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200); _, _ = w.Write([]byte("ok")) })
 }
+
+func adminHandler() http.Handler { return adminui.Handler() }
 
 func (s *Server) handleIngestPath(w http.ResponseWriter, r *http.Request) {
     parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/ingest/"), "/")
@@ -289,6 +299,119 @@ func (s *Server) adminRoutes(w http.ResponseWriter, r *http.Request) {
     default:
         http.Error(w, "method not allowed", 405)
     }
+}
+
+// /admin/routes/{id}/pause or /resume
+func (s *Server) adminRoutesSub(w http.ResponseWriter, r *http.Request) {
+    if !s.checkAdmin(w, r) { return }
+    if r.Method != http.MethodPost { http.Error(w, "method not allowed", 405); return }
+    parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/admin/routes/"), "/")
+    if len(parts) != 2 { http.Error(w, "not found", 404); return }
+    routeID := parts[0]
+    action := parts[1]
+    switch action {
+    case "pause":
+        if _, err := s.DB.Exec(r.Context(), `UPDATE route SET enabled=false WHERE route_id=$1::uuid`, routeID); err != nil { http.Error(w, "internal", 500); return }
+    case "resume":
+        if _, err := s.DB.Exec(r.Context(), `UPDATE route SET enabled=true WHERE route_id=$1::uuid`, routeID); err != nil { http.Error(w, "internal", 500); return }
+    default:
+        http.Error(w, "not found", 404); return
+    }
+    _ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+}
+
+// /admin/sources/{id}/token (GET) or /rotate (POST)
+func (s *Server) adminSourcesSub(w http.ResponseWriter, r *http.Request) {
+    if !s.checkAdmin(w, r) { return }
+    parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/admin/sources/"), "/")
+    if len(parts) < 1 { http.Error(w, "not found", 404); return }
+    srcID := parts[0]
+    if len(parts) == 1 {
+        if r.Method != http.MethodGet { http.Error(w, "method not allowed", 405); return }
+        var token string
+        if err := s.DB.QueryRow(r.Context(), `SELECT token FROM source WHERE source_id=$1::uuid`, srcID).Scan(&token); err != nil { http.Error(w, "not found", 404); return }
+        _ = json.NewEncoder(w).Encode(map[string]any{"token": token})
+        return
+    }
+    if parts[1] == "rotate" && r.Method == http.MethodPost {
+        newTok := uuid.Must(uuid.NewV4()).String()
+        if _, err := s.DB.Exec(r.Context(), `UPDATE source SET token=$2 WHERE source_id=$1::uuid`, srcID, newTok); err != nil { http.Error(w, "internal", 500); return }
+        _ = json.NewEncoder(w).Encode(map[string]any{"token": newTok})
+        return
+    }
+    http.Error(w, "not found", 404)
+}
+
+// GET /admin/events?source_id=... or source_name=...&limit=20
+func (s *Server) adminEvents(w http.ResponseWriter, r *http.Request) {
+    if !s.checkAdmin(w, r) { return }
+    if r.Method != http.MethodGet { http.Error(w, "method not allowed", 405); return }
+    q := r.URL.Query()
+    sid := q.Get("source_id")
+    sname := q.Get("source_name")
+    limit := 20
+    if v := q.Get("limit"); v != "" { if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 { limit = n } }
+    if sid == "" && sname != "" {
+        _ = s.DB.QueryRow(r.Context(), `SELECT source_id::text FROM source WHERE name=$1`, sname).Scan(&sid)
+    }
+    if sid == "" { http.Error(w, "source_id or source_name required", 400); return }
+    rows, err := s.DB.Query(r.Context(), `
+        SELECT event_id::text, received_at, coalesce(content_type,''), body_size, coalesce(method,''), coalesce(path,''), coalesce(query,'')
+        FROM event WHERE source_id=$1::uuid ORDER BY received_at DESC LIMIT $2
+    `, sid, limit)
+    if err != nil { http.Error(w, "internal", 500); return }
+    defer rows.Close()
+    type item struct {
+        EventID string    `json:"event_id"`
+        ReceivedAt time.Time `json:"received_at"`
+        ContentType string `json:"content_type"`
+        BodySize int32 `json:"body_size"`
+        Method string `json:"method"`
+        Path string `json:"path"`
+        Query string `json:"query"`
+    }
+    var out []item
+    for rows.Next() {
+        var it item
+        if err := rows.Scan(&it.EventID, &it.ReceivedAt, &it.ContentType, &it.BodySize, &it.Method, &it.Path, &it.Query); err != nil { http.Error(w, "internal", 500); return }
+        out = append(out, it)
+    }
+    _ = json.NewEncoder(w).Encode(map[string]any{"items": out})
+}
+
+// GET /admin/attempts?event_id=...&limit=50
+func (s *Server) adminAttempts(w http.ResponseWriter, r *http.Request) {
+    if !s.checkAdmin(w, r) { return }
+    if r.Method != http.MethodGet { http.Error(w, "method not allowed", 405); return }
+    q := r.URL.Query()
+    eid := q.Get("event_id")
+    if eid == "" { http.Error(w, "event_id required", 400); return }
+    limit := 50
+    if v := q.Get("limit"); v != "" { if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 { limit = n } }
+    rows, err := s.DB.Query(r.Context(), `
+        SELECT attempt_id::text, route_id::text, attempt_no, status::text, next_at, picked_at, succeeded_at, failed_at, http_code
+        FROM delivery_attempt WHERE event_id=$1::uuid ORDER BY created_at ASC LIMIT $2
+    `, eid, limit)
+    if err != nil { http.Error(w, "internal", 500); return }
+    defer rows.Close()
+    type item struct {
+        AttemptID string `json:"attempt_id"`
+        RouteID string `json:"route_id"`
+        AttemptNo int32 `json:"attempt_no"`
+        Status string `json:"status"`
+        NextAt *time.Time `json:"next_at"`
+        PickedAt *time.Time `json:"picked_at"`
+        SucceededAt *time.Time `json:"succeeded_at"`
+        FailedAt *time.Time `json:"failed_at"`
+        HTTPCode *int `json:"http_code"`
+    }
+    var out []item
+    for rows.Next() {
+        var it item
+        if err := rows.Scan(&it.AttemptID, &it.RouteID, &it.AttemptNo, &it.Status, &it.NextAt, &it.PickedAt, &it.SucceededAt, &it.FailedAt, &it.HTTPCode); err != nil { http.Error(w, "internal", 500); return }
+        out = append(out, it)
+    }
+    _ = json.NewEncoder(w).Encode(map[string]any{"items": out})
 }
 
 
