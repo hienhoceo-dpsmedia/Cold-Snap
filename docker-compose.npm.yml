@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  api:
+    networks:
+      - npm_proxy
+
+networks:
+  npm_proxy:
+    external: true
+

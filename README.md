@@ -81,21 +81,39 @@ Open n8n at http://localhost:5678 and configure a Test Webhook (e.g. `/webhook/t
 
 Note: This project is not affiliated with n8n GmbH. “n8n” is a trademark of its respective owner.
 
-## Deploy with Portainer (Stack)
+## Quick Install (Portainer + Nginx Proxy Manager)
 
-Portainer makes deploying the full stack easy using the Git repo:
+Two steps: 1) deploy the stack in Portainer, 2) publish your domain with Nginx Proxy Manager (NPM).
 
-- In Portainer, go to `Stacks` → `Add stack` → `Repository`.
-- Repository URL: your GitHub repo URL (e.g., `https://github.com/<you>/Cold-Snap`).
-- Repository reference: `refs/heads/main` (or your branch).
-- Compose path: `docker-compose.yml`.
-- Environment variables: set `ADMIN_TOKEN` to a strong random string; keep other defaults unless needed.
-- Deploy the stack. Portainer builds images from the Dockerfile and starts `api`, `worker`, `postgres`, `redis`.
+Step 1 — Portainer stack (from Git)
+- Stacks → Add stack → Repository
+- Repository URL: `https://github.com/<you>/Cold-Snap`
+- Reference: `refs/heads/main`
+- Compose path: `docker-compose.yml`
+- Environment variables: set `ADMIN_TOKEN` to a strong random value
+- Deploy (services: api on 8080, worker, postgres, redis)
 
-After deploy:
-- Open `http://<your-host>:8080/healthz` for health.
-- Seed sample data in Portainer: `Stacks` → select stack → `Containers` → open `postgres` → `Console` → run `psql -U hook -d hook` and paste the contents of `seeds/demo.sql`.
-  - For n8n demo, paste `seeds/n8n-demo.sql` and ensure an `n8n` container is reachable at `http://n8n:5678` (use `docker-compose.n8n.yml` or your own n8n deployment).
+Step 2 — Nginx Proxy Manager (proxy host)
+
+Option A — shared Docker network (recommended)
+1. Portainer → Networks → Add network → name: `npm_proxy`
+2. Add an extra compose file when deploying: `docker-compose.npm.yml`
+3. In NPM: Hosts → Proxy Hosts → Add
+   - Domain Names: `coldsnap.yourdomain.com`
+   - Scheme: `http`
+   - Forward Hostname/IP: `api`
+   - Forward Port: `8080`
+   - Advanced → Custom Nginx: `client_max_body_size 10m;`
+   - SSL: Request a new certificate → Force SSL (optional)
+
+Option B — no shared network
+- Forward Hostname/IP: your server’s LAN IP (or docker bridge `172.17.0.1`)
+- Forward Port: `8080`
+- Same SSL and Advanced settings as above
+
+Verify: open `https://coldsnap.yourdomain.com/healthz`
+
+Seed (optional): in Portainer → Containers → postgres → Console → `psql -U hook -d hook`, paste `seeds/demo.sql`. For n8n demo use `seeds/n8n-demo.sql`.
 
 ## Admin REST (create sources/destinations/routes)
 
