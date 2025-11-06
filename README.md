@@ -6,6 +6,7 @@
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-336791?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
+[![GHCR](https://img.shields.io/badge/GHCR-Ready-brightgreen?style=flat-square&logo=github&logoColor=white)](https://github.com/hienhoceo-dpsmedia/Cold-Snap/pkgs/container/cold-snap)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
 **Smart webhook throttling that keeps your n8n cool under pressure** ❄️
@@ -171,36 +172,46 @@ Configure a webhook trigger at `/webhook/test` - Cold Snap will protect it with 
 
 ### 📋 Portainer + Nginx Proxy Manager
 
-#### Default: Use Prebuilt Images (no build in Portainer)
+#### Default: Use Prebuilt Images (no build in Portainer) ⭐
 
-1. Push this repo to GitHub (main branch). The included workflow publishes `ghcr.io/<owner>/cold-snap:latest` automatically for your account.
+1. **Prebuilt Image Ready**: `ghcr.io/hienhoceo-dpsmedia/cold-snap:latest` is already built and available!
 2. In Portainer: **Stacks** → **Add stack** → **Repository**
 3. Set:
-   - **Repository URL**: `https://github.com/hienhoceo-dpsmedia/Cold-Snap` (or your fork)
+   - **Repository URL**: `https://github.com/hienhoceo-dpsmedia/Cold-Snap`
    - **Reference**: `refs/heads/main`
    - **Compose path**: `docker-compose.image.yml`
-4. Add a `stack.env` file to your repo (Portainer reads this in Repository mode):
+4. **stack.env is included** - Portainer automatically reads it from the repo:
    ```env
-   # Required: the image to pull (use your GHCR user/org)
-   IMAGE=ghcr.io/<your-gh-username>/cold-snap:latest
+   # Prebuilt Image Configuration
+   IMAGE=ghcr.io/hienhoceo-dpsmedia/cold-snap:latest
 
-   # Admin access
+   # Security - CHANGE THESE VALUES
    ADMIN_TOKEN=change_me_to_a_strong_random
    ADMIN_USER=admin
    ADMIN_PASS=supersecret
 
-   # Public address (for links)
+   # Public URL - Update to your actual domain
    PUBLIC_URL=https://coldsnap.yourdomain.com
 
-   # Optional: DB/Redis overrides
+   # API Configuration
    API_PORT=8080
    RETENTION_DAYS=7
+   WORKER_NAME=worker-1
+   WORKER_VERSION=v1.0.0
+
+   # Database Configuration
+   POSTGRES_USER=hook
+   POSTGRES_PASSWORD=hook
+   POSTGRES_DB=hook
+   PG_PORT=5432
+
+   # Compose URLs (internal networking)
    DATABASE_URL=postgres://hook:hook@postgres:5432/hook?sslmode=disable
    REDIS_URL=redis://redis:6379/0
    ```
 5. Deploy 🚀 (services: api on 8080, worker, postgres, redis)
 
-> Tip: If you prefer Docker Hub, set `IMAGE=<your-dockerhub-username>/cold-snap:latest` and push there.
+> **✅ Ready to Deploy**: The prebuilt image is verified and working. Just edit `ADMIN_TOKEN`, `ADMIN_USER`, `ADMIN_PASS`, and `PUBLIC_URL` before deploying!
 
 #### Alternative: Build From Repository (only if you want to build in Portainer)
 
