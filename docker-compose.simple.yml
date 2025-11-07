@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  webhook-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.simple
+    container_name: webhook-proxy-app
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_PRIMARY_DOMAIN: ${NEXT_PUBLIC_PRIMARY_DOMAIN:-localhost:3000}
+      DATABASE_URL: postgresql://webhook:${POSTGRES_PASSWORD}@webhook-db:5432/webhookproxy
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - webhook-db
+
+  webhook-db:
+    image: postgres:16-alpine
+    container_name: webhook-proxy-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: webhookproxy
+      POSTGRES_USER: webhook
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:
