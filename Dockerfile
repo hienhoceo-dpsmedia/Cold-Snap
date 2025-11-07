@@ -7,18 +7,9 @@ FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Install dependencies based on the preferred package manager
-COPY package.json pnpm-lock.yaml* ./
-RUN \
-  if [ -f pnpm-lock.yaml ]; then \
-    corepack enable pnpm && pnpm i --frozen-lockfile ; \
-  elif [ -f package-lock.json ]; then \
-    npm ci; \
-  elif [ -f yarn.lock ]; then \
-    corepack enable yarn && yarn install --frozen-lockfile; \
-  else \
-    echo "Lockfile not found." && exit 1; \
-  fi
+# Install dependencies
+COPY package.json package-lock.json* ./
+RUN npm ci --omit=dev --ignore-scripts
 
 
 # Rebuild the source code only when needed
@@ -32,12 +23,7 @@ COPY . .
 
 # Build the application
 ENV NEXT_TELEMETRY_DISABLED 1
-RUN \
-  if [ -f pnpm-lock.yaml ]; then \
-    corepack enable pnpm && pnpm run build; \
-  else \
-    npm run build; \
-  fi
+RUN npm run build
 
 # Production image, copy all the files and run next
 FROM base AS runner

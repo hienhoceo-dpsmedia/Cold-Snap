@@ -3,7 +3,9 @@ version: '3.8'
 services:
   # Main Webhook Proxy Application
   webhook-proxy:
-    image: webhook-proxy:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: webhook-proxy-app
     restart: unless-stopped
     environment:
