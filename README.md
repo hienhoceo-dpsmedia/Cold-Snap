@@ -75,14 +75,42 @@ That's it! Your webhook proxy will be running in minutes.
 | `NEXT_PUBLIC_PRIMARY_DOMAIN` | ✅ | Your domain (e.g., webhook.yourdomain.com) |
 | `ACME_EMAIL` | ❌ | Email for SSL certificates |
 
-### GitHub OAuth Setup
+### GitHub OAuth Setup (Required for Login)
+
+**Step 1: Create GitHub OAuth App**
 
 1. Go to [GitHub Settings → Developer settings → OAuth Apps](https://github.com/settings/applications/new)
-2. Create new OAuth App:
-   - **Application name**: Webhook Proxy
-   - **Homepage URL**: `https://your-domain.com`
-   - **Authorization callback URL**: `https://your-domain.com/api/login/callback`
-3. Copy Client ID and Secret to `.env`
+2. Click **"New OAuth App"**
+3. Fill in the form:
+   - **Application name**: `Webhook Proxy` (or any name you prefer)
+   - **Homepage URL**: `https://your-domain.com` (replace with your actual domain)
+   - **Authorization callback URL**: `https://your-domain.com/api/login/callback` (IMPORTANT: This exact URL is required)
+   - **Application description**: Optional (e.g., "Webhook management system")
+4. Click **"Register application"**
+
+**Step 2: Get Credentials**
+
+After creating the app, you'll see:
+- **Client ID**: Copy this value
+- **Client Secret**: Click "Generate a new client secret" and copy it
+
+**Step 3: Update Environment File**
+
+Edit your `.env` file:
+
+```bash
+# Replace with your actual values
+GITHUB_CLIENT_ID=your_actual_github_client_id_here
+GITHUB_CLIENT_SECRET=your_actual_github_client_secret_here
+
+# Your domain where you'll deploy
+NEXT_PUBLIC_PRIMARY_DOMAIN=your-domain.com
+```
+
+**Important Notes:**
+- The callback URL **must** be exactly `https://your-domain.com/api/login/callback`
+- For local development, use: `http://localhost:3000/api/login/callback`
+- The domain in `NEXT_PUBLIC_PRIMARY_DOMAIN` must match the Homepage URL in GitHub OAuth app
 
 ## 🏗️ Architecture
 

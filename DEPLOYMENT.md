@@ -47,15 +47,40 @@ GITHUB_CLIENT_SECRET=your_github_client_secret
 ACME_EMAIL=admin@your-domain.com
 ```
 
-### 2. Create GitHub OAuth App
+### 2. Create GitHub OAuth App (Required for Login)
 
-1. Go to GitHub Settings → Developer settings → OAuth Apps
-2. Click "New OAuth App"
-3. Set:
-   - **Application name**: Webhook Proxy
-   - **Homepage URL**: `https://your-domain.com`
-   - **Authorization callback URL**: `https://your-domain.com/api/login/callback`
-4. Copy the Client ID and Client Secret to your `.env` file
+**Step-by-Step Guide:**
+
+1. **Navigate to GitHub OAuth Settings**
+   - Go to [GitHub Settings → Developer settings → OAuth Apps](https://github.com/settings/applications/new)
+   - Click **"New OAuth App"**
+
+2. **Fill in the OAuth Application Form**
+   - **Application name**: `Webhook Proxy` (or any name you prefer)
+   - **Homepage URL**: `https://your-domain.com` (replace with your actual domain)
+   - **Authorization callback URL**: `https://your-domain.com/api/login/callback` ⚠️ **This exact URL is required**
+   - **Application description**: `Webhook management system` (optional)
+
+3. **Register and Get Credentials**
+   - Click **"Register application"**
+   - You'll see a **Client ID** - copy this value
+   - Click **"Generate a new client secret"** - copy this secret immediately (you won't see it again)
+
+4. **Update Your .env File**
+   ```bash
+   # Replace these with your actual GitHub OAuth values
+   GITHUB_CLIENT_ID=iv1lx0a1b2c3d4e5f6g7h    # Replace with your actual Client ID
+   GITHUB_CLIENT_SECRET=your_actual_secret_here   # Replace with your actual Client Secret
+
+   # Must match your domain from GitHub OAuth app
+   NEXT_PUBLIC_PRIMARY_DOMAIN=your-domain.com
+   ```
+
+**⚠️ Critical Requirements:**
+- The callback URL **must** be exactly: `https://your-domain.com/api/login/callback`
+- For local testing: use `http://localhost:3000/api/login/callback`
+- The domain in `NEXT_PUBLIC_PRIMARY_DOMAIN` must match the GitHub OAuth Homepage URL
+- Both Client ID and Client Secret are required for login to work
 
 ### 3. Deploy with Portainer
 
