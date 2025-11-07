@@ -1,0 +1,176 @@
+version: '3.8'
+
+services:
+  # Main Webhook Proxy Application
+  webhook-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: webhook-proxy-app
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_PRIMARY_DOMAIN: ${NEXT_PUBLIC_PRIMARY_DOMAIN:-localhost:3000}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-webhook}:${POSTGRES_PASSWORD:-webhook123}@webhook-db:5432/${POSTGRES_DB:-webhookproxy}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+    ports:
+      - "${WEBHOOK_PORT:-3000}:3000"
+    depends_on:
+      webhook-db:
+        condition: service_healthy
+    networks:
+      - webhook-network
+    volumes:
+      - webhook-data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.webhook-proxy.rule=Host(`${WEBHOOK_DOMAIN:-localhost}`)"
+      - "traefik.http.routers.webhook-proxy.entrypoints=web"
+      - "traefik.http.routers.webhook-proxy.service=webhook-proxy"
+      - "traefik.http.services.webhook-proxy.loadbalancer.server.port=3000"
+      - "traefik.http.routers.webhook-proxy-secure.rule=Host(`${WEBHOOK_DOMAIN:-localhost}`)"
+      - "traefik.http.routers.webhook-proxy-secure.entrypoints=websecure"
+      - "traefik.http.routers.webhook-proxy-secure.tls=true"
+      - "traefik.http.routers.webhook-proxy-secure.tls.certresolver=myresolver"
+
+  # PostgreSQL Database
+  webhook-db:
+    image: postgres:16-alpine
+    container_name: webhook-proxy-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-webhookproxy}
+      POSTGRES_USER: ${POSTGRES_USER:-webhook}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-webhook123}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d ${POSTGRES_DB:-webhookproxy} -U ${POSTGRES_USER:-webhook}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - webhook-network
+    labels:
+      - "traefik.enable=false"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  # Redis Cache (optional for improved performance)
+  redis:
+    image: redis:7-alpine
+    container_name: webhook-proxy-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      ${REDIS_PASSWORD:+--requirepass $REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    volumes:
+      - redis_data:/data
+      - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - webhook-network
+    labels:
+      - "traefik.enable=false"
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+  # Traefik Reverse Proxy (Optional but recommended for production)
+  traefik:
+    image: traefik:v3.0
+    container_name: webhook-proxy-traefik
+    restart: unless-stopped
+    command:
+      - "--api.insecure=false"
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=webhook-network"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL:-admin@example.com}"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      - "--log.level=${TRAEFIK_LOG_LEVEL:-INFO}"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"  # Traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_data:/letsencrypt
+    networks:
+      - webhook-network
+    depends_on:
+      - webhook-proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`${TRAEFIK_DASHBOARD_DOMAIN:-traefik.localhost}`)"
+      - "traefik.http.routers.traefik.entrypoints=web"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.middlewares=traefik-auth"
+      - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_BASIC_AUTH:-admin:$$apr1$$$$}$$"
+
+  # Database Administration (Optional)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: webhook-proxy-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - webhook-network
+    depends_on:
+      - webhook-db
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pgadmin.rule=Host(`${PGADMIN_DOMAIN:-pgadmin.localhost}`)"
+      - "traefik.http.routers.pgadmin.entrypoints=web"
+      - "traefik.http.routers.pgadmin.service=pgadmin"
+      - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
+
+networks:
+  webhook-network:
+    driver: bridge
+    name: webhook-proxy-network
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  postgres_data:
+    driver: local
+    name: webhook_proxy_postgres_data
+  redis_data:
+    driver: local
+    name: webhook_proxy_redis_data
+  webhook-data:
+    driver: local
+    name: webhook_proxy_app_data
+  traefik_data:
+    driver: local
+    name: webhook_proxy_traefik_data
+  pgadmin_data:
+    driver: local
+    name: webhook_proxy_pgadmin_data

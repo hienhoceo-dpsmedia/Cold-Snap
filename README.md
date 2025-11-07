@@ -1,582 +1,259 @@
-<div align="center">
+# Webhook Proxy - Portainer Ready
 
-# 🧊 Cold Snap
+A powerful webhook management tool that's ready to deploy with Portainer. This repository contains a fully configured webhook proxy system with Docker Compose setup for production deployment.
 
-[![Go](https://img.shields.io/badge/Go-00ADD8?style=flat-square&logo=go&logoColor=white)](https://golang.org/)
-[![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-336791?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
-[![GHCR](https://img.shields.io/badge/GHCR-Ready-brightgreen?style=flat-square&logo=github&logoColor=white)](https://github.com/hienhoceo-dpsmedia/Cold-Snap/pkgs/container/cold-snap)
-[![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
+![Webhook Proxy Screenshot](screenshot.png)
 
-**Smart webhook throttling that keeps your n8n cool under pressure** ❄️
+## 🚀 Features
 
-A minimal, self-hosted webhook gateway that fronts n8n (or any app) to enforce webhook rate limits, retries, and safety — keeping your workflows running smoothly under pressure.
+- **Multi-endpoint Management**: Add and manage multiple webhook endpoints
+- **Message Persistence**: Save received messages for 7 days
+- **Smart Forwarding**: Automatically forward incoming messages to one or more destinations
+- **Flexible Routing**: Choose forwarding strategy (first in list, all in list)
+- **Fallback Support**: Automatic fallback forwarding if primary destination is down
+- **Message Replay**: Resend webhook data to destinations on demand
+- **Modern UI**: Built with Next.js, Tailwind CSS, and tRPC
+- **Production Ready**: Complete Docker setup with PostgreSQL and Redis
 
-[🚀 Quick Start](#-quick-start) • [📖 Documentation](#-documentation) • [🎯 Features](#-features) • [🔧 Configuration](#-configuration)
+## 🐳 Quick Start with Portainer
 
-</div>
-
-## 🎯 About Cold Snap
-
-### 🔒 Branding & Independence
-- **n8n Focused**: The branding references n8n because many users need to protect n8n webhooks
-- **Zero Integration Required**: Cold Snap does not integrate with or require access to n8n internals
-- **Smart Proxy**: Acts as an intelligent reverse proxy with buffering, backpressure, and retries
-- **Secure**: You never share n8n credentials/keys/tokens with Cold Snap
-- **Universal**: Works with any webhook consumer (n8n, Zapier, custom apps, internal APIs)
-
----
-
-## ✨ Features
-
-### 🚀 **Core MVP Features**
-- 🗄️ **PostgreSQL** schema with auto-migrations on startup
-- 📥 **Ingest API**: `POST /ingest/{token}` or `POST /ingest` with `Authorization: Bearer <token>`
-- 💾 **Event Persistence**: Raw body, headers, content-type, source IP, optional Idempotency-Key
-- 🔍 **Request Fidelity**: Stores `method`, relative `path`, and `query` parameters
-- 🎯 **Smart Routing**: One delivery attempt per enabled route with content-type filtering
-- ⚡ **High-Performance Worker**: PostgreSQL `FOR UPDATE SKIP LOCKED` loop with SSRF protection
-- 🚦 **Rate Limiting**: Redis-based token-bucket limiter + max inflight control per destination
-- 🛡️ **Circuit Breaker**: Automatic protection with cooldown and retry logic
-- 🔄 **Path Passthrough**: Destination can `append_path` to forward inbound path/query
-- 🔁 **Event Replay**: `POST /events/{event_id}/replay` creates fresh delivery attempts
-- 🧹 **Auto Cleanup**: Worker removes events older than `RETENTION_DAYS` (default 7)
-
-### 🎨 **Admin Interface**
-- 🌐 **Web UI**: Modern admin console for monitoring and management
-- 📊 **Real-time Dashboard**: Live webhook status and metrics
-- 🔧 **Management**: Create/edit sources, destinations, and routes via UI
-- 📱 **Responsive**: Works on desktop and mobile devices
-
-### 🛠️ **Coming Soon**
-- 📈 **Advanced Metrics**: Prometheus integration and detailed analytics
-- 🔍 **Request Tracing**: End-to-end webhook flow visualization
-- 🎛️ **Enhanced Routing**: Advanced filters and conditional logic
-- 🔄 **Retry Strategies**: Configurable backoff and retry policies
-
-## 🚀 Quick Start
-
-### 🐳 Docker Compose (Recommended)
+### 1. Clone and Setup
 
 ```bash
-# Clone and build
 git clone https://github.com/hienhoceo-dpsmedia/Cold-Snap.git
 cd Cold-Snap
-
-# Build and start all services
-docker compose up --build
-
-# API available at http://localhost:8080/healthz
-# Admin UI available at http://localhost:8080/console/
 ```
 
-**📊 Services Started:**
-- 🌐 **API Server**: `http://localhost:8080`
-- 🗄️ **PostgreSQL**: `localhost:5432` (user: `hook`, password: `hook`, db: `hook`)
-- 🚦 **Redis**: `localhost:6379`
-- ⚙️ **Worker**: Background delivery processor
-- ✅ **Health**: `/healthz` (liveness) and `/readyz` (readiness)
+### 2. Configure Environment
 
----
-
-## 🌱 Quick Setup
-
-### Option 1: **Use the Admin UI** 🎨
-
-1. Open `http://localhost:8080/console/` in your browser
-2. Enter your admin token (or use the default)
-3. Create sources, destinations, and routes via the web interface
-
-### Option 2: **Database Setup** 💾
-
-Connect to PostgreSQL and create test data:
-
-```sql
--- Connect to database
-psql postgres://hook:hook@localhost:5432/hook
-
--- Create a source with authentication token
-INSERT INTO source (name, token) VALUES ('demo-source', 'demo_token')
-  ON CONFLICT (name) DO UPDATE SET token=EXCLUDED.token;
-
--- Create a destination (where webhooks get delivered)
-INSERT INTO destination (name, url, headers, secret, max_rps, burst, max_inflight)
-VALUES ('echo-dest', 'https://postman-echo.com/post', '{"X-Static": "1"}', NULL, 5.0, 5, 3)
-  ON CONFLICT (name) DO UPDATE SET url=EXCLUDED.url;
-
--- Create a route (maps source → destination)
-INSERT INTO route (source_id, destination_id, enabled, content_type_like)
-SELECT s.source_id, d.destination_id, true, 'application/json%'
-FROM source s, destination d
-WHERE s.name='demo-source' AND d.name='echo-dest'
-ON CONFLICT (source_id, destination_id) DO NOTHING;
-```
-
----
-
-## 🧪 Test Your Setup
-
-### Send a Test Webhook
+Copy the environment template:
 
 ```bash
-curl -i -X POST \
-  -H 'Content-Type: application/json' \
-  -d '{"hello":"world","timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}' \
-  http://localhost:8080/ingest/demo_token
+cp .env.production .env
 ```
 
-**✅ Expected Response:** `202 Accepted`
-The worker will deliver the webhook to your destination with rate limiting and SSRF protection.
-
----
-
-## 🔥 n8n Integration (Zero Setup Required!)
-
-### Quick Start with n8n
+Edit `.env` with your configuration:
 
 ```bash
-# Start gateway + n8n together
-npm run up:n8n
-npm run seed:n8n
+# Required: GitHub OAuth (create app at https://github.com/settings/applications/new)
+GITHUB_CLIENT_ID=your_github_client_id
+GITHUB_CLIENT_SECRET=your_github_client_secret
 
-# Send webhook to gateway (forwards to n8n)
-curl -i -X POST \
-  -H 'Content-Type: application/json' \
-  -d '{"hello":"n8n","workflow":"test"}' \
-  http://localhost:8080/ingest/n8n_token/webhook/test
+# Required: Database password
+POSTGRES_PASSWORD=your_secure_password
+
+# Your domain
+NEXT_PUBLIC_PRIMARY_DOMAIN=your-domain.com
 ```
 
-🎯 **Open n8n**: http://localhost:5678
-Configure a webhook trigger at `/webhook/test` - Cold Snap will protect it with rate limiting and retries.
+### 3. Deploy with Portainer
 
-### 🔧 n8n Setup Options
+1. Open Portainer web interface
+2. Go to **Stacks** → **Add stack**
+3. Set name: `webhook-proxy`
+4. Copy contents of `docker-compose.portainer.yml`
+5. Click **Deploy the stack**
 
-#### Option A: Full URL
-- **Destination URL**: `https://n8n.example.com/webhook/<your-id>`
-- **Append Path**: `false`
-- **Result**: Direct forwarding to specific webhook
+That's it! Your webhook proxy will be running in minutes.
 
-#### Option B: Base URL + Path Forwarding ⭐
-- **Destination URL**: `https://n8n.example.com`
-- **Append Path**: `true`
-- **Result**: `POST /ingest/token/webhook/test` → `https://n8n.example.com/webhook/test`
+## 📋 Prerequisites
 
-> 💡 **Security First**: You never share n8n credentials with Cold Snap. It only forwards HTTP requests to your webhook URLs.
+- Docker and Docker Compose
+- Portainer (recommended) or Docker CLI
+- Domain name (for production)
+- GitHub OAuth App (for authentication)
 
-> ⚠️ **Disclaimer**: This project is not affiliated with n8n GmbH. "n8n" is a trademark of its respective owner.
-
----
-
-## 🏗️ Production Deployment
-
-### 📋 Portainer + Nginx Proxy Manager
-
-#### Default: Use Prebuilt Images (no build in Portainer) ⭐
-
-1. **Prebuilt Image Ready**: `ghcr.io/hienhoceo-dpsmedia/cold-snap:latest` is already built and available!
-2. In Portainer: **Stacks** → **Add stack** → **Repository**
-3. Set:
-   - **Repository URL**: `https://github.com/hienhoceo-dpsmedia/Cold-Snap`
-   - **Reference**: `refs/heads/main`
-   - **Compose path**: `docker-compose.image.yml`
-4. **stack.env is included** - Portainer automatically reads it from the repo:
-   ```env
-   # Prebuilt Image Configuration
-   IMAGE=ghcr.io/hienhoceo-dpsmedia/cold-snap:latest
-
-   # Security - CHANGE THESE VALUES
-   ADMIN_TOKEN=change_me_to_a_strong_random
-   ADMIN_USER=admin
-   ADMIN_PASS=supersecret
-
-   # Public URL - Update to your actual domain
-   PUBLIC_URL=https://coldsnap.yourdomain.com
-
-   # API Configuration
-   API_PORT=8080
-   RETENTION_DAYS=7
-   WORKER_NAME=worker-1
-   WORKER_VERSION=v1.0.0
-
-   # Database Configuration - Use alternative ports to avoid conflicts
-   POSTGRES_USER=hook
-   POSTGRES_PASSWORD=hook
-   POSTGRES_DB=hook
-   PG_PORT=15432  # Changed from 5432 to avoid conflicts
-   REDIS_PORT=16379  # Changed from 6379 to avoid conflicts
-
-   # Compose URLs (internal networking - keep original internal ports)
-   DATABASE_URL=postgres://hook:hook@postgres:5432/hook?sslmode=disable
-   REDIS_URL=redis://redis:6379/0
-   ```
-5. Deploy 🚀 (services: api on 8080, worker, postgres, redis)
-
-> **✅ Ready to Deploy**: The prebuilt image is verified and working. Just edit `ADMIN_TOKEN`, `ADMIN_USER`, `ADMIN_PASS`, and `PUBLIC_URL` before deploying!
-
-#### 🛠️ Troubleshooting Port Conflicts
-
-If you get "port is already allocated" errors during deployment:
-
-**Issue**: Port 5432 or 6379 already in use on your server.
-
-**Solution**: The `stack.env` already uses alternative ports:
-- **PostgreSQL**: `15432` (instead of default `5432`)
-- **Redis**: `16379` (instead of default `6379`)
-
-**Accessing Database Directly**:
-```bash
-# Connect to PostgreSQL on alternative port
-psql postgres://hook:hook@localhost:15432/hook
-
-# Connect to Redis on alternative port
-redis-cli -p 16379
-```
-
-If you need different ports, just update `PG_PORT` and `REDIS_PORT` in `stack.env`.
-
-#### 🔄 Database Connection Issues
-
-If you see "connection refused" errors during startup:
-
-**Issue**: Application starting before database is ready.
-
-**Solution**: The latest update includes health checks that ensure PostgreSQL and Redis are fully started before the application begins:
-
-- ✅ **Health Checks**: PostgreSQL and Redis wait until healthy
-- ✅ **Smart Dependencies**: API/Worker wait for database readiness
-- ✅ **Auto Restart**: Services restart if they fail
-
-**Manual Verification**:
-```bash
-# Check container logs in Portainer
-# Look for "Database connected successfully" message
-
-# Test database connection manually
-docker exec -it coldsnap-postgres-1 psql -U hook -d hook -c "SELECT 1;"
-```
-
-#### 🔐 Password Authentication Failed
-
-If you see "password authentication failed for user 'hook'":
-
-**Issue**: Database was created with different credentials than current configuration.
-
-**Solutions**:
-
-**Option 1: Clean Slate (Recommended)**
-1. In Portainer: Remove the stack
-2. Volumes → Delete the `pgdata` volume
-3. Redeploy the stack (creates fresh database with correct credentials)
-
-**Option 2: Check Current Credentials**
-```bash
-# Verify what credentials Portainer is using
-# Check stack.env in Portainer environment variables:
-# POSTGRES_USER=hook
-# POSTGRES_PASSWORD=hook
-# POSTGRES_DB=hook
-```
-
-**Option 3: Connect with Different Credentials**
-If you have existing data and know the old password:
-```bash
-# Connect with old password
-docker exec -it coldsnap-postgres-1 psql -U hook -d hook -c "ALTER USER hook PASSWORD 'hook';"
-```
-
-#### Alternative: Build From Repository (only if you want to build in Portainer)
-
-If you must build in Portainer, switch the compose path to `docker-compose.yml`. In restricted networks add to `stack.env` (or Portainer build args):
-
-```env
-GOPROXY=https://goproxy.io,direct
-GOSUMDB=sum.golang.org
-```
-
-Portainer passes these to the build automatically. Otherwise use the prebuilt image flow above.
-
-**Step 2: Configure Nginx Proxy Manager**
-
-#### Option A: Shared Docker Network ⭐ (Recommended)
-```bash
-# Create shared network
-docker network create npm_proxy
-
-# Use docker-compose.npm.yml for extra network configuration
-```
-
-In **NPM**: **Hosts** → **Proxy Hosts** → **Add**
-- **Domain Names**: `coldsnap.yourdomain.com`
-- **Scheme**: `http`
-- **Forward Hostname/IP**: `api`
-- **Forward Port**: `8080`
-- **Advanced** → **Custom Nginx**: `client_max_body_size 10m;`
-- **SSL**: Request certificate → Force SSL (recommended)
-
-#### Option B: Direct IP
-- **Forward Hostname/IP**: Your server's LAN IP (e.g., `172.17.0.1`)
-- **Forward Port**: `8080`
-- Same SSL and Advanced settings as above
-
-**✅ Verify**: Open `https://coldsnap.yourdomain.com/healthz`
-
-> 💡 **Pro Tip**: Use the web UI at `/console/` to manage sources, destinations, and routes - no SQL required!
-
----
-
-## 🛠️ API Documentation
-
-### 🔐 Admin REST API
-
-Protect admin endpoints with `ADMIN_TOKEN` environment variable and authenticate using `Authorization: Bearer <token>`.
-
-#### 📥 Create Source
-```bash
-curl -s -X POST http://localhost:8080/admin/sources \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "name": "shopify",
-    "max_body_bytes": 1048576
-  }'
-```
-
-#### 📤 Create Destination
-```bash
-curl -s -X POST http://localhost:8080/admin/destinations \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "name": "internal-api",
-    "url": "https://example.com/hooks",
-    "headers": {"X-App": "ColdSnap"},
-    "max_rps": 2.0,
-    "burst": 5,
-    "max_inflight": 2,
-    "append_path": true
-  }'
-```
-
-#### 🔗 Create Route (Connect Source → Destination)
-```bash
-curl -s -X POST http://localhost:8080/admin/routes \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "source_name": "shopify",
-    "destination_name": "internal-api",
-    "content_type_like": "application/json%"
-  }'
-```
-
-#### 📋 List Resources
-```bash
-# List all sources
-curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
-  http://localhost:8080/admin/sources
-
-# List all destinations
-curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
-  http://localhost:8080/admin/destinations
-
-# List all routes
-curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
-  http://localhost:8080/admin/routes
-```
-
-### 📡 Ingest API
-Send webhooks to `POST /ingest/{token}` for any created source. The worker delivers to mapped destinations with:
-
-- ✅ **Rate limiting** and **retry logic**
-- ✅ **SSRF protection** and **security guards**
-- ✅ **Event persistence** and **replay capabilities**
-
----
-
-## 🚀 Development Setup
-
-### 📦 Using NPM Scripts
-
-If you prefer npm to wrap Docker Compose:
-
-```bash
-npm run up          # 🚀 build and start all services
-npm run logs        # 📋 follow logs
-npm run seed        # 🌱 seed demo source/destination/route
-npm run down        # 🛑 stop and remove containers + volumes
-npm run up:n8n      # 🔥 start with n8n integration
-npm run seed:n8n    # 🌱 seed n8n demo data
-```
-
-**Requirements:**
-- 🐳 Docker Engine
-- 🟢 Node.js (>=18)
-- The npm scripts are convenient wrappers around `docker compose`
-
----
-
-## 🌍 Custom Domain Setup
-
-### 🔧 Manual Nginx Deployment
-
-Deploy Cold Snap on your own domain with this step-by-step guide:
-
-#### 1️⃣ DNS Configuration
-```bash
-# Create A/AAAA record pointing to your server
-coldsnap.yourdomain.com → YOUR_SERVER_IP
-```
-
-#### 2️⃣ Server Prerequisites
-```bash
-# Ubuntu/Debian example
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-sudo apt-get install docker-compose-plugin
-
-# Install Node.js 18+
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-nvm install 18
-
-# Install Nginx
-sudo apt-get update && sudo apt-get install nginx
-```
-
-#### 3️⃣ Deploy Cold Snap
-```bash
-# Clone and setup
-git clone https://github.com/hienhoceo-dpsmedia/Cold-Snap.git
-cd Cold-Snap
-
-# Create environment file
-cat > .env <<EOF
-ADMIN_TOKEN=$(openssl rand -hex 16)
-API_PORT=8080
-RETENTION_DAYS=7
-EOF
-
-# Start services
-npm run up
-```
-
-#### 4️⃣ Configure Nginx Reverse Proxy
-```bash
-# Copy and customize Nginx config
-sudo cp deploy/nginx.coldsnap.example.conf /etc/nginx/sites-available/coldsnap.conf
-
-# Edit server_name and settings
-sudo nano /etc/nginx/sites-available/coldsnap.conf
-
-# Enable site
-sudo ln -s /etc/nginx/sites-available/coldsnap.conf /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-
-# Test: http://coldsnap.yourdomain.com/healthz ✅
-```
-
-#### 5️⃣ Enable HTTPS with Let's Encrypt
-```bash
-sudo apt-get install certbot python3-certbot-nginx
-sudo certbot --nginx -d coldsnap.yourdomain.com
-```
-
-#### 6️⃣ Configure via Admin API
-```bash
-export ADMIN_TOKEN=$(grep ADMIN_TOKEN .env | cut -d= -f2)
-# Follow API examples above to create sources, destinations, routes
-```
-
-### 💡 Production Tips
-- **Body Size**: Keep Nginx `client_max_body_size` ≥ source `max_body_bytes` (default 1MB)
-- **Security**: For HTTPS-only, proxy to `127.0.0.1:8080` instead of exposing ports
-- **Monitoring**: Use `/healthz` for health checks and `/console/` for management
-
----
-
-## ⚙️ Configuration
+## 🔧 Configuration
 
 ### Environment Variables
-```bash
-# Core Service Configuration
-ROLE=api|worker                    # Service role (Docker Compose runs both)
-API_PORT=8080                     # API server port
-ADMIN_TOKEN=your_secret_token     # Admin authentication token
 
-# Database Configuration
-DATABASE_URL=postgres://...       # PostgreSQL connection string
-REDIS_URL=redis://...             # Redis connection string
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GITHUB_CLIENT_ID` | ✅ | GitHub OAuth Client ID |
+| `GITHUB_CLIENT_SECRET` | ✅ | GitHub OAuth Client Secret |
+| `POSTGRES_PASSWORD` | ✅ | Database password |
+| `NEXT_PUBLIC_PRIMARY_DOMAIN` | ✅ | Your domain (e.g., webhook.yourdomain.com) |
+| `ACME_EMAIL` | ❌ | Email for SSL certificates |
 
-# Worker Configuration
-WORKER_NAME=worker-1              # Optional worker identifier
-WORKER_VERSION=v1.0.0             # Optional version label
-RETENTION_DAYS=7                  # Event retention period (default: 7)
+### GitHub OAuth Setup
 
-# Performance Tuning
-MAX_WORKERS=10                    # Maximum concurrent workers
-BATCH_SIZE=100                    # Event processing batch size
-TIMEOUT_SECONDS=30                # Request timeout
+1. Go to [GitHub Settings → Developer settings → OAuth Apps](https://github.com/settings/applications/new)
+2. Create new OAuth App:
+   - **Application name**: Webhook Proxy
+   - **Homepage URL**: `https://your-domain.com`
+   - **Authorization callback URL**: `https://your-domain.com/api/login/callback`
+3. Copy Client ID and Secret to `.env`
+
+## 🏗️ Architecture
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Webhook UI    │    │   PostgreSQL     │    │     Redis       │
+│   (Next.js)     │    │   (Database)     │    │    (Cache)      │
+│     Port 3000   │    │    Port 5432     │    │    Port 6379    │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+                    ┌──────────────────┐
+                    │   Traefik        │
+                    │ (Load Balancer)  │
+                    │  Ports 80/443    │
+                    └──────────────────┘
 ```
 
-### 🚀 Advanced Configuration
-- **Rate Limiting**: Per-destination `max_rps`, `burst`, and `max_inflight`
-- **Circuit Breaking**: Automatic failure detection and recovery
-- **SSRF Protection**: IP whitelisting and network security
-- **Retry Logic**: Configurable backoff strategies (coming soon)
+## 📁 Project Structure
 
----
+```
+├── src/                    # Next.js application source
+│   ├── app/               # App router pages
+│   ├── components/        # React components
+│   └── server/           # Backend API and database
+├── docker/               # Docker configuration files
+├── docker-compose.portainer.yml  # Full Portainer stack
+├── PORTAINER-STACK.yml   # Simplified stack
+├── Dockerfile           # Multi-stage production build
+├── DEPLOYMENT.md        # Detailed deployment guide
+└── .env.production      # Environment template
+```
 
-## 🗺️ Roadmap
+## 🔌 Access Points
 
-### ✅ **Completed (MVP)**
-- [x] Core webhook ingestion and delivery
-- [x] PostgreSQL event persistence
-- [x] Redis rate limiting
-- [x] Basic admin REST API
-- [x] Web admin console
-- [x] Docker deployment
+After deployment:
 
-### 🚧 **In Development**
-- [ ] Advanced retry strategies
-- [ ] Prometheus metrics
-- [ ] Enhanced routing filters
+- **Webhook Proxy**: `https://your-domain.com`
+- **Traefik Dashboard**: `https://traefik.your-domain.com`
+- **Database Admin**: `https://pgadmin.your-domain.com`
 
-### 🎯 **Coming Soon**
-- [ ] **Advanced Analytics**: Request tracing and detailed metrics
-- [ ] **Enhanced Security**: IP whitelisting and advanced SSRF protection
-- [ ] **Smart Routing**: Conditional logic and advanced filters
-- [ ] **High Availability**: Multi-node clustering and failover
-- [ ] **Integration Hub**: Pre-built connectors for popular services
+## 📊 What Webhook Proxy Can Do
 
----
+### 1. **Receive Webhooks**
+- Create custom endpoints
+- Support multiple webhooks simultaneously
+- Automatic message validation and logging
+
+### 2. **Forward Messages**
+- Forward to multiple destinations
+- Choose routing strategy:
+  - **First Success**: Send to first destination, try others on failure
+  - **Send to All**: Broadcast to all destinations
+  - **Load Balance**: Distribute across destinations
+
+### 3. **Monitor & Replay**
+- View all received messages
+- Check delivery status and logs
+- Replay failed or successful deliveries
+- 7-day message retention
+
+### 4. **Manage Destinations**
+- Add HTTP endpoints as destinations
+- Configure custom headers and authentication
+- Test destination connectivity
+
+## 🛠️ Development
+
+For local development:
+
+```bash
+# Install dependencies
+npm install
+
+# Copy environment
+cp .env.example .env
+
+# Start database
+docker-compose up -d db
+
+# Run database migrations
+npm run db:push
+
+# Start development server
+npm run dev
+```
+
+Open http://localhost:3000
+
+## 🔍 Monitoring
+
+### Health Checks
+- Application: `GET /api/health`
+- Database: Automatic PostgreSQL health check
+- Redis: Automatic Redis health check
+
+### Logs
+```bash
+# Application logs
+docker-compose logs -f webhook-proxy
+
+# Database logs
+docker-compose logs -f webhook-db
+```
+
+## 🔒 Security
+
+- 🔐 GitHub OAuth authentication
+- 🛡️ HTTPS with automatic SSL (Let's Encrypt)
+- 🔒 Isolated Docker networks
+- 🚫 No exposed database ports to internet
+- 📝 Environment-based configuration
+
+## 📈 Scaling
+
+For high-traffic deployments:
+
+- **Horizontal Scaling**: Run multiple app instances
+- **Database Optimization**: Use connection pooling
+- **Redis Clustering**: For high-throughput caching
+- **Load Balancing**: Traefik automatically handles multiple instances
+
+## 🆘 Troubleshooting
+
+### Common Issues
+
+**"GitHub OAuth not working"**
+- Check callback URL matches GitHub app settings
+- Verify Client ID and Secret are correct
+- Ensure domain matches OAuth application
+
+**"Database connection failed"**
+- Check PostgreSQL container is running
+- Verify DATABASE_URL format
+- Check for port conflicts
+
+**"Application won't start"**
+- Review environment variables
+- Check Docker logs: `docker-compose logs webhook-proxy`
+- Verify all required services are healthy
+
+### Reset Everything
+```bash
+docker-compose -f docker-compose.portainer.yml down -v
+docker-compose -f docker-compose.portainer.yml up -d
+```
+
+## 📚 Documentation
+
+- [Detailed Deployment Guide](DEPLOYMENT.md)
+- [Next.js Documentation](https://nextjs.org/docs)
+- [Drizzle ORM](https://orm.drizzle.team/)
+- [tRPC](https://trpc.io/)
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
-
-### Development Setup
-```bash
-git clone https://github.com/hienhoceo-dpsmedia/Cold-Snap.git
-cd Cold-Snap
-npm run up
-# Make your changes...
-npm run test  # Coming soon
-```
-
----
+1. Fork the repository
+2. Create feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit pull request
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
+
+## 🌟 Credits
+
+Based on the original [Webhook Proxy](https://github.com/un/webhook-proxy) by the UnJS team.
 
 ---
 
-## 🧊 **Cold Snap** - Keep Your Webhooks Cool
-
-Made with ❄️ for reliable webhook delivery
-
-<div align="center">
-
-[🚀 Get Started](#-quick-start) • [📖 Documentation](#-documentation) • [🔧 Configuration](#-configuration) • [🤝 Contributing](#-contributing)
-
-</div>
+**Ready to deploy in 5 minutes with Portainer! 🚀**

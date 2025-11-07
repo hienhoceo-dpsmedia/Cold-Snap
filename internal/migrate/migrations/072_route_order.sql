@@ -1,3 +1,0 @@
-ALTER TABLE route
-  ADD COLUMN IF NOT EXISTS ord smallint NOT NULL DEFAULT 0;
-

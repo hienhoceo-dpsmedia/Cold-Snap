@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # Main Webhook Proxy Application
+  webhook-proxy:
+    image: webhook-proxy:latest
+    container_name: webhook-proxy-app
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_PRIMARY_DOMAIN: ${NEXT_PUBLIC_PRIMARY_DOMAIN:-localhost:3000}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-webhook}:${POSTGRES_PASSWORD}@webhook-db:5432/${POSTGRES_DB:-webhookproxy}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+    ports:
+      - "3000:3000"
+    depends_on:
+      webhook-db:
+        condition: service_healthy
+    networks:
+      - webhook-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL Database
+  webhook-db:
+    image: postgres:16-alpine
+    container_name: webhook-proxy-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-webhookproxy}
+      POSTGRES_USER: ${POSTGRES_USER:-webhook}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d ${POSTGRES_DB:-webhookproxy} -U ${POSTGRES_USER:-webhook}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - webhook-network
+    ports:
+      - "5432:5432"
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: webhook-proxy-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    volumes:
+      - redis_data:/data
+    networks:
+      - webhook-network
+    ports:
+      - "6379:6379"
+
+networks:
+  webhook-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
