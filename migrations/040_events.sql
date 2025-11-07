@@ -8,9 +8,8 @@ CREATE TABLE IF NOT EXISTS event (
   body_size          integer NOT NULL,
   source_ip          inet,
   idempotency_key    text,
-  body_hash_sha256   bytea,
-
-  CREATE UNIQUE INDEX IF NOT EXISTS event_source_idempotency_key_idx ON event(source_id, idempotency_key) WHERE idempotency_key IS NOT NULL
+  body_hash_sha256   bytea
 );
+CREATE UNIQUE INDEX IF NOT EXISTS event_source_idempotency_key_idx ON event(source_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS event_source_received_idx ON event(source_id, received_at DESC);
 
